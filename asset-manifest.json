@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/netTubo-evaluation/static/css/main.052c282d.css",
+    "main.js": "/netTubo-evaluation/static/js/main.7e064322.js",
+    "static/js/453.f8be1b96.chunk.js": "/netTubo-evaluation/static/js/453.f8be1b96.chunk.js",
+    "index.html": "/netTubo-evaluation/index.html",
+    "main.052c282d.css.map": "/netTubo-evaluation/static/css/main.052c282d.css.map",
+    "main.7e064322.js.map": "/netTubo-evaluation/static/js/main.7e064322.js.map",
+    "453.f8be1b96.chunk.js.map": "/netTubo-evaluation/static/js/453.f8be1b96.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.052c282d.css",
+    "static/js/main.7e064322.js"
+  ]
+}
