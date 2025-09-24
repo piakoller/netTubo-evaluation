@@ -1,0 +1,22 @@
+{
+  "name": "net-evaluation-backend",
+  "version": "1.0.0",
+  "description": "Backend server for NetTubo LLM evaluation",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "fs-extra": "^11.2.0",
+    "path": "^0.12.7",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}
