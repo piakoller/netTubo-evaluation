@@ -6,12 +6,22 @@ import remarkGfm from 'remark-gfm';
 
 const { Title, Text } = Typography;
 
-const TherapyRecommendation = ({ recommendation, patientId }) => {
+const TherapyRecommendation = ({ recommendation, patientId, trialData = [] }) => {
   const [expanded, setExpanded] = useState(false);
 
   if (!recommendation) return null;
 
   const { raw_response } = recommendation;
+
+  // Create a map of NCT IDs to their URLs from trial data
+  const nctUrlMap = {};
+  if (trialData && Array.isArray(trialData)) {
+    trialData.forEach(trial => {
+      if (trial.nct_id && trial.url) {
+        nctUrlMap[trial.nct_id] = trial.url;
+      }
+    });
+  }
 
   const copyText = async (text) => {
     try {
@@ -51,6 +61,33 @@ const TherapyRecommendation = ({ recommendation, patientId }) => {
 
   const sanitizedRaw = sanitizeRaw(raw_response || '');
 
+  // Component to render markdown with NCT links
+  const MarkdownWithNCTLinks = ({ content }) => {
+    if (!content) return null;
+    
+    // Split content by NCT numbers and create mixed content
+    const nctRegex = /(NCT\d{8})/g;
+    const parts = content.split(nctRegex);
+    
+    const processedContent = parts.map((part, index) => {
+      if (part.match(/^NCT\d{8}$/)) {
+        // This is an NCT number
+        const url = nctUrlMap[part];
+        if (url) {
+          return `[${part}](${url})`;
+        }
+        return part;
+      }
+      return part;
+    }).join('');
+
+    return (
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+        {processedContent}
+      </ReactMarkdown>
+    );
+  };
+
 const markdownComponents = {
     p: ({ node, ...props }) => (
       // Added a small margin-bottom and explicit line-height for paragraphs
@@ -74,6 +111,23 @@ const markdownComponents = {
       // Reduced margin-bottom and added explicit line-height for list items for tighter spacing
       <li style={{ margin: '0 0 0.2em 0', lineHeight: '1.4' }} {...props} />
     ),
+    // Custom link component with target="_blank" for external links
+    a: ({ node, href, children, ...props }) => (
+      <a 
+        href={href} 
+        target="_blank" 
+        rel="noopener noreferrer"
+        style={{ 
+          color: '#1890ff', 
+          textDecoration: 'underline',
+          fontWeight: href && href.includes('clinicaltrials.gov') ? 'bold' : 'normal'
+        }}
+        title={href && href.includes('clinicaltrials.gov') ? `Open ${children} on ClinicalTrials.gov` : undefined}
+        {...props}
+      >
+        {children}
+      </a>
+    )
   };
 
   const parseSections = (raw) => {
@@ -142,9 +196,7 @@ const markdownComponents = {
           {sections.therapy ? (
             <div style={{ marginBottom: 16 }}>
               <Title level={5} style={{ marginTop: 0 }}>Therapy Recommendation</Title>
-              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
-                {sections.therapy}
-              </ReactMarkdown>
+              <MarkdownWithNCTLinks content={sections.therapy} />
             </div>
           ) : null}
 
@@ -152,17 +204,13 @@ const markdownComponents = {
             <div style={{ marginTop: sections.therapy ? 8 : 0 }}>
               {sections.therapy ? <Divider /> : null}
               <Title level={5} style={{ marginTop: 0 }}>Rationale</Title>
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {sections.rationale}
-              </ReactMarkdown>
+              <MarkdownWithNCTLinks content={sections.rationale} />
             </div>
           ) : null}
 
           {!sections.therapy && !sections.rationale ? (
             sanitizedRaw ? (
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {sanitizedRaw}
-              </ReactMarkdown>
+              <MarkdownWithNCTLinks content={sanitizedRaw} />
             ) : (
               <Text>No recommendation available</Text>
             )

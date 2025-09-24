@@ -242,6 +242,7 @@ const PatientEvaluation = ({ userData }) => {
               <TherapyRecommendation 
                 recommendation={selectedPatient.recommendation} 
                 patientId={selectedPatientId}
+                trialData={selectedPatient.trial_data}
               />
             </Col>
           </Row>

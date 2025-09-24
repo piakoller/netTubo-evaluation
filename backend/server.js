@@ -173,12 +173,18 @@ async function loadAllPatientData() {
 
       // Load recommendation raw text from workflow
       let recommendation = null;
+      let trialData = null;
       if (workflow && workflow.recommendation_result) {
         const raw = workflow.recommendation_result.raw_response || workflow.recommendation_result["raw_response"];
         recommendation = {
           raw_response: raw || 'No recommendation available',
           source: 'complete_workflow'
         };
+        
+        // Extract trial matching data for NCT linking
+        if (workflow.trial_matching_result && workflow.trial_matching_result.relevant_trials) {
+          trialData = workflow.trial_matching_result.relevant_trials;
+        }
       } else {
         // Fallback to legacy files
         recommendation = await loadLegacyRecommendation(patientId);
@@ -191,7 +197,8 @@ async function loadAllPatientData() {
         clinical_question: clinicalQuestion || 'No clinical question provided',
         expert_recommendation: expertRecommendation,
         original_patient_data: originalPatientData,
-        recommendation
+        recommendation,
+        trial_data: trialData  // Add trial data for NCT linking
       };
 
       console.log(`Processed patient ${patientId} (workflow=${!!workflow}, rec=${!!recommendation})`);
