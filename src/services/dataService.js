@@ -1,4 +1,4 @@
-// Data service for loading LLM therapy recommendations
+// Data service for loading LLM therapy recommendatijs
 class DataService {
   constructor() {
     this.baseURL = 'http://localhost:5001/api';
