@@ -40,24 +40,37 @@ const TherapyRecommendation = ({ recommendation, patientId, trialData = [] }) =>
     }
   };
 
-  const sanitizeRaw = (raw) => {
-    if (!raw) return '';
-    let s = String(raw);
-    s = s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    s = s.replace(/\\n/g, '\n');
-    s = s.replace(/\u00A0/g, ' ');
-    s = s.replace(/<therapy_recommendation>/gi, '')
-         .replace(/<\/therapy_recommendation>/gi, '')
-         .replace(/<rationale>/gi, '')
-         .replace(/<\/rationale>/gi, '');
-    s = s.replace(/^\s+$/gm, '');
-    // These two lines try to consolidate list markers followed by newlines and spaces, ensuring correct parsing
-    s = s.replace(/(^|\n)\s*(\d+\.)\s*\n\s*/g, '$1$2 ');
-    s = s.replace(/(^|\n)\s*([*+\-])\s*\n\s*/g, '$1$2 ');
-    s = s.replace(/\n{2,}/g, '\n'); // Collapse 2+ newlines to 1 to reduce excessive spacing
-    s = s.trim();
-    return s;
-  };
+const sanitizeRaw = (raw) => {
+  if (!raw) return '';
+  let s = String(raw);
+
+  // Normalisiere Linebreaks
+  s = s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  s = s.replace(/\\n/g, '\n');
+  s = s.replace(/\u00A0/g, ' ');
+
+  // Entferne eigene Tags
+  s = s.replace(/<\/?(therapy_recommendation|rationale)>/gi, '');
+
+  // Entferne reine Leerzeilen
+  s = s.replace(/^\s+$/gm, '');
+
+  // Fix für Listen: Marker nicht durch linebreaks zerstören
+  s = s.replace(/(^|\n)\s*(\d+\.)\s*\n\s*/g, '$1$2 ');
+  s = s.replace(/(^|\n)\s*([*+\-])\s*\n\s*/g, '$1$2 ');
+
+  // ⚡ Wichtiger Schritt: Überschriften und Listen behalten ihre Umbrüche,
+  // sonst aber Umbrüche in Fließtext durch Leerzeichen ersetzen
+  s = s.replace(/([^\n])\n(?![#*\-0-9])/g, '$1 ');
+
+  // AGGRESSIVER: Alle mehrfachen Umbrüche auf einen einzigen reduzieren
+  s = s.replace(/\n{2,}/g, '\n');
+
+  // OPTIONAL: Alle verbleibenden Umbrüche durch Leerzeichen ersetzen (für komplett fließenden Text)
+  // s = s.replace(/\n/g, ' ');
+
+  return s.trim();
+};
 
   const sanitizedRaw = sanitizeRaw(raw_response || '');
 
@@ -90,26 +103,41 @@ const TherapyRecommendation = ({ recommendation, patientId, trialData = [] }) =>
 
 const markdownComponents = {
     p: ({ node, ...props }) => (
-      // Added a small margin-bottom and explicit line-height for paragraphs
-      <p style={{ margin: '0 0 0.5em 0', whiteSpace: 'normal', lineHeight: '1.4' }} {...props} />
+      // Reduced margin for tighter spacing
+      <p style={{ margin: '0 0 0.2em 0', whiteSpace: 'normal', lineHeight: '1.3' }} {...props} />
     ),
-    h1: ({ node, ...props }) => (<h1 style={{ margin: '0 0 0.5em 0' }} {...props} />),
-    h2: ({ node, ...props }) => (<h2 style={{ margin: '0 0 0.5em 0' }} {...props} />),
-    h3: ({ node, ...props }) => (<h3 style={{ margin: '0 0 0.5em 0' }} {...props} />),
-    h4: ({ node, ...props }) => (<h4 style={{ margin: '0 0 0.5em 0' }} {...props} />),
-    h5: ({ node, ...props }) => (<h5 style={{ margin: '0 0 0.5em 0' }} {...props} />),
-    h6: ({ node, ...props }) => (<h6 style={{ margin: '0 0 0.5em 0' }} {...props} />),
+    h1: ({ node, ...props }) => (<h1 style={{ margin: '0 0 0.3em 0', lineHeight: '1.2' }} {...props} />),
+    h2: ({ node, ...props }) => (<h2 style={{ margin: '0 0 0.3em 0', lineHeight: '1.2' }} {...props} />),
+    h3: ({ node, ...props }) => (<h3 style={{ margin: '0 0 0.3em 0', lineHeight: '1.2' }} {...props} />),
+    h4: ({ node, ...props }) => (<h4 style={{ margin: '0 0 0.3em 0', lineHeight: '1.2' }} {...props} />),
+    h5: ({ node, ...props }) => (<h5 style={{ margin: '0 0 0.3em 0', lineHeight: '1.2' }} {...props} />),
+    h6: ({ node, ...props }) => (<h6 style={{ margin: '0 0 0.3em 0', lineHeight: '1.2' }} {...props} />),
     ul: ({ node, ...props }) => (
-      // Added a small margin-bottom for lists to separate them from subsequent elements
-      <ul style={{ margin: '0 0 0.5em 0', paddingLeft: 20 }} {...props} />
+      // Almost zero margin and minimal padding for lists
+      <ul style={{ 
+        margin: '0', 
+        marginBottom: '0.3em',
+        // paddingLeft: '1.2em',
+        listStylePosition: 'outside'
+      }} {...props} />
     ),
     ol: ({ node, ...props }) => (
-      // Added a small margin-bottom for lists
-      <ol style={{ margin: '0 0 0.5em 0', paddingLeft: 20 }} {...props} />
+      // Almost zero margin and minimal padding for ordered lists
+      <ol style={{ 
+        margin: '0', 
+        marginBottom: '0.3em',
+        paddingLeft: '1.2em',
+        listStylePosition: 'outside'
+      }} {...props} />
     ),
     li: ({ node, ...props }) => (
-      // Reduced margin-bottom and added explicit line-height for list items for tighter spacing
-      <li style={{ margin: '0 0 0.2em 0', lineHeight: '1.4' }} {...props} />
+      // Zero margin for list items
+      <li style={{ 
+        margin: '0', 
+        padding: '0',
+        lineHeight: '1.3',
+        marginBottom: '0.1em'
+      }} {...props} />
     ),
     // Custom link component with target="_blank" for external links
     a: ({ node, href, children, ...props }) => (
@@ -190,7 +218,7 @@ const markdownComponents = {
             borderRadius: '6px',
             backgroundColor: '#fafafa',
             fontFamily: 'inherit',
-            lineHeight: '1.6'
+            lineHeight: '1.3'  // Reduced from 1.6 to 1.3 for tighter spacing
           }}
         >
           {sections.therapy ? (
