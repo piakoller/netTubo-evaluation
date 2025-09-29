@@ -3,13 +3,25 @@ const cors = require('cors');
 const fs = require('fs-extra');
 const path = require('path');
 const ExcelJS = require('exceljs');
+require('dotenv').config();
+
+// Database
+const dbConnection = require('./database/connection');
+
+// Routes
+const userRoutes = require('./routes/users');
+const evaluationRoutes = require('./routes/evaluations');
 
 const app = express();
-const PORT = 5001; // Different port from the other backend
+const PORT = process.env.PORT || 5001;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// API Routes
+app.use('/api/users', userRoutes);
+app.use('/api/evaluations', evaluationRoutes);
 
 // Data paths
 const PATIENT_DATA_PATH = path.join('C:', 'Users', 'pia', 'OneDrive - Universitaet Bern', 'Projects', 'NetTubo', 'netTubo', 'data', 'ExpertCases.xlsx');
@@ -297,10 +309,18 @@ app.get('/api/debug/excel', async (req, res) => {
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
+  const dbStatus = dbConnection.getConnectionStatus();
+  
   res.json({ 
     status: 'OK', 
     message: 'NetTubo Evaluation Backend is running',
     timestamp: new Date().toISOString(),
+    database: {
+      connected: dbStatus.isConnected,
+      name: dbStatus.name,
+      host: dbStatus.host,
+      port: dbStatus.port
+    },
     paths: {
       patientData: PATIENT_DATA_PATH,
       batchResults: BATCH_RESULTS_PATH
@@ -308,18 +328,34 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`NetTubo Evaluation Backend running on port ${PORT}`);
-  console.log(`Patient data path: ${PATIENT_DATA_PATH}`);
-  console.log(`Batch results path: ${BATCH_RESULTS_PATH}`);
-  
-  // Check if paths exist
-  fs.pathExists(PATIENT_DATA_PATH).then(exists => {
-    console.log(`Patient data file exists: ${exists}`);
-  });
-  
-  fs.pathExists(BATCH_RESULTS_PATH).then(exists => {
-    console.log(`Batch results directory exists: ${exists}`);
-  });
-});
+// Initialize database connection and start server
+async function startServer() {
+  try {
+    // Connect to MongoDB
+    await dbConnection.connect();
+    
+    // Start server
+    app.listen(PORT, () => {
+      console.log(`🚀 NetTubo Evaluation Backend running on port ${PORT}`);
+      console.log(`📊 MongoDB: ${dbConnection.isConnected ? '✅ Connected' : '❌ Disconnected'}`);
+      console.log(`📂 Patient data path: ${PATIENT_DATA_PATH}`);
+      console.log(`📁 Batch results path: ${BATCH_RESULTS_PATH}`);
+      
+      // Check if paths exist
+      fs.pathExists(PATIENT_DATA_PATH).then(exists => {
+        console.log(`📋 Patient data file exists: ${exists ? '✅' : '❌'}`);
+      });
+      
+      fs.pathExists(BATCH_RESULTS_PATH).then(exists => {
+        console.log(`📊 Batch results directory exists: ${exists ? '✅' : '❌'}`);
+      });
+    });
+    
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+// Start the server
+startServer();

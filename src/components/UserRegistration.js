@@ -44,10 +44,28 @@ const UserRegistration = ({ onRegistrationComplete }) => {
         sessionStart: new Date().toISOString()
       };
 
-      // Save to database (API call would go here)
-      console.log('User registered:', userData);
+      // Save to database via API
+      const response = await fetch('http://localhost:5001/api/users/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: userData.userId,
+          profession: userData.profession,
+          yearsExperience: parseInt(userData.yearsExperience)
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to register user');
+      }
+
+      const result = await response.json();
+      console.log('User registered in database:', result);
       
-      // Store in localStorage for session management
+      // Still store in localStorage for session management (as backup)
       localStorage.setItem('userStudyData', JSON.stringify(userData));
       
       // Call parent callback to proceed to instructions
@@ -55,6 +73,23 @@ const UserRegistration = ({ onRegistrationComplete }) => {
       
     } catch (error) {
       console.error('Registration error:', error);
+      
+      // Fallback to localStorage if API fails
+      const userData = {
+        userId: generateUserId(),
+        profession: values.profession,
+        yearsExperience: values.yearsExperience,
+        timestamp: new Date().toISOString(),
+        sessionStart: new Date().toISOString()
+      };
+      
+      localStorage.setItem('userStudyData', JSON.stringify(userData));
+      console.log('Saved to localStorage as fallback:', userData);
+      
+      // Show warning but continue
+      alert('Warning: Could not connect to database. Data saved locally. Please ensure the backend server is running.');
+      onRegistrationComplete(userData);
+      
     } finally {
       setLoading(false);
     }

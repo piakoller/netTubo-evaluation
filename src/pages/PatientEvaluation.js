@@ -76,17 +76,57 @@ const PatientEvaluation = ({ userData }) => {
     }
   };
 
-  const loadCompletedEvaluations = () => {
+  const loadCompletedEvaluations = async () => {
+    try {
+      // Try to load from database first
+      if (userData?.userId) {
+        const response = await fetch(`http://localhost:5001/api/users/${userData.userId}`);
+        if (response.ok) {
+          const result = await response.json();
+          const completedSet = new Set(result.user?.completedEvaluations || []);
+          setCompletedEvaluations(completedSet);
+          console.log('Loaded completed evaluations from database:', completedSet.size);
+          return;
+        }
+      }
+    } catch (error) {
+      console.warn('Could not load completed evaluations from database:', error.message);
+    }
+    
+    // Fallback to localStorage
     const completed = localStorage.getItem(`completedEvaluations_${userData?.userId}`);
     if (completed) {
       setCompletedEvaluations(new Set(JSON.parse(completed)));
     }
   };
 
-  const saveCompletedEvaluation = (patientId) => {
+  const saveCompletedEvaluation = async (patientId) => {
     const newCompleted = new Set([...completedEvaluations, patientId]);
     setCompletedEvaluations(newCompleted);
+    
+    // Save to localStorage as backup
     localStorage.setItem(`completedEvaluations_${userData?.userId}`, JSON.stringify([...newCompleted]));
+    
+    // Update in database
+    try {
+      if (userData?.userId) {
+        const response = await fetch(`http://localhost:5001/api/users/${userData.userId}/completed`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ patientId })
+        });
+        
+        if (response.ok) {
+          console.log('Updated completed evaluations in database');
+        } else {
+          console.warn('Could not update completed evaluations in database');
+        }
+      }
+    } catch (error) {
+      console.warn('Error updating completed evaluations in database:', error.message);
+    }
   };
 
   const handlePatientSelect = (patientId) => {
@@ -114,21 +154,20 @@ const PatientEvaluation = ({ userData }) => {
         patient_id: selectedPatientId,
         user_data: userData,
         timestamp: new Date().toISOString(),
+        evaluationStartTime: new Date().toISOString(), // You might want to track actual start time
         ...evaluationData
       };
 
-      // Save evaluation to database (API call would go here)
-      console.log('Evaluation submitted:', evaluation);
+      // Save evaluation to database
+      await dataService.saveEvaluation(evaluation);
       
       // Mark this patient as completed
-      const updatedCompleted = new Set([...completedEvaluations, selectedPatientId]);
-      setCompletedEvaluations(updatedCompleted);
-      localStorage.setItem(`completedEvaluations_${userData?.userId}`, JSON.stringify([...updatedCompleted]));
+      await saveCompletedEvaluation(selectedPatientId);
       
       message.success('Evaluation submitted successfully!');
       
       // Auto-select next patient if available
-      const nextPatient = pickNextPatientId(patients, updatedCompleted, selectedPatientId);
+      const nextPatient = pickNextPatientId(patients, new Set([...completedEvaluations, selectedPatientId]), selectedPatientId);
 
       if (nextPatient) {
         setTimeout(() => {

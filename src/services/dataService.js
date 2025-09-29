@@ -106,27 +106,95 @@ class DataService {
     }
   }
 
-  // Mock evaluation storage (in real app, would save to file system or database)
+  // Save evaluation to database
   async saveEvaluation(evaluation) {
-    console.log('Saving evaluation:', evaluation);
+    console.log('Saving evaluation to database:', evaluation);
     
-    // Store in localStorage for demo purposes
-    const evaluations = JSON.parse(localStorage.getItem('evaluations') || '[]');
-    evaluation.id = Date.now().toString();
-    evaluation.timestamp = new Date().toISOString();
-    evaluations.push(evaluation);
-    localStorage.setItem('evaluations', JSON.stringify(evaluations));
-    
-    return evaluation;
+    try {
+      // Add evaluation start time if not present
+      const evaluationData = {
+        ...evaluation,
+        evaluationStartTime: evaluation.evaluationStartTime || new Date().toISOString()
+      };
+
+      // Send to database
+      const response = await fetch(`${this.baseURL}/evaluations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: evaluationData.user_data?.userId,
+          patientId: evaluationData.patient_id,
+          overallRating: evaluationData.overall_rating,
+          implementationWillingness: evaluationData.implementation_willingness,
+          comments: evaluationData.comments || '',
+          userData: evaluationData.user_data,
+          evaluationStartTime: evaluationData.evaluationStartTime
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save evaluation');
+      }
+
+      const result = await response.json();
+      console.log('Evaluation saved to database:', result);
+      
+      // Also store in localStorage as backup
+      const evaluations = JSON.parse(localStorage.getItem('evaluations') || '[]');
+      const localEvaluation = {
+        ...evaluation,
+        id: result.evaluation?.evaluationId || Date.now().toString(),
+        timestamp: new Date().toISOString()
+      };
+      evaluations.push(localEvaluation);
+      localStorage.setItem('evaluations', JSON.stringify(evaluations));
+      
+      return result.evaluation;
+      
+    } catch (error) {
+      console.error('Error saving to database:', error);
+      
+      // Fallback to localStorage
+      console.log('Falling back to localStorage...');
+      const evaluations = JSON.parse(localStorage.getItem('evaluations') || '[]');
+      evaluation.id = Date.now().toString();
+      evaluation.timestamp = new Date().toISOString();
+      evaluations.push(evaluation);
+      localStorage.setItem('evaluations', JSON.stringify(evaluations));
+      
+      // Show warning but don't fail
+      console.warn('Evaluation saved to localStorage as fallback');
+      return evaluation;
+    }
   }
 
   async loadEvaluations() {
     try {
-      const evaluations = JSON.parse(localStorage.getItem('evaluations') || '[]');
-      return evaluations;
+      // Try to load from database first
+      const response = await fetch(`${this.baseURL}/evaluations`);
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`Loaded ${result.evaluations?.length || 0} evaluations from database`);
+        return result.evaluations || [];
+      } else {
+        throw new Error('Database not available');
+      }
+      
     } catch (error) {
-      console.error('Error loading evaluations:', error);
-      return [];
+      console.warn('Could not load from database, using localStorage:', error.message);
+      
+      // Fallback to localStorage
+      try {
+        const evaluations = JSON.parse(localStorage.getItem('evaluations') || '[]');
+        return evaluations;
+      } catch (error) {
+        console.error('Error loading evaluations:', error);
+        return [];
+      }
     }
   }
 
