@@ -3,22 +3,78 @@ const cors = require('cors');
 const fs = require('fs-extra');
 const path = require('path');
 const ExcelJS = require('exceljs');
+require('dotenv').config();
+
+// Database
+const dbConnection = require('./database/connection');
+
+// Routes
+const userRoutes = require('./routes/users');
+const evaluationRoutes = require('./routes/evaluations');
 
 const app = express();
-const PORT = 5001; // Different port from the other backend
+const PORT = process.env.PORT || 5001;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
+// Study access code verification
+const parseAccessCodes = (raw) => {
+  if (!raw) return [];
+  return String(raw)
+    .split(',')
+    .map((c) => c.trim())
+    .filter(Boolean);
+};
+
+const ACCESS_CODES = parseAccessCodes(process.env.STUDY_ACCESS_CODES || process.env.ACCESS_CODES);
+
+app.post('/api/access/verify', (req, res) => {
+  try {
+    const code = (req.body && String(req.body.code || '').trim()) || '';
+    if (!ACCESS_CODES.length) {
+      return res.status(503).json({ error: 'Access code not configured on server' });
+    }
+    if (!code) {
+      return res.status(400).json({ error: 'Access code is required' });
+    }
+    const ok = ACCESS_CODES.some((c) => c.toLowerCase() === code.toLowerCase());
+    if (!ok) {
+      return res.status(401).json({ error: 'Invalid access code' });
+    }
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('Access code verification error:', err);
+    return res.status(500).json({ error: 'Failed to verify access code' });
+  }
+});
+
+// API Routes
+app.use('/api/users', userRoutes);
+app.use('/api/evaluations', evaluationRoutes);
+
 // Data paths
 const PATIENT_DATA_PATH = path.join('C:', 'Users', 'pia', 'OneDrive - Universitaet Bern', 'Projects', 'NetTubo', 'netTubo', 'data', 'ExpertCases.xlsx');
-const BATCH_RESULTS_PATH = path.join('C:', 'Users', 'pia', 'OneDrive - Universitaet Bern', 'Projects', 'NetTubo', 'netTubo', 'agentic_assessment', 'batch_results', 'run_20250922_094323', 'batch_run_20250922_094323');
+const BATCH_RESULTS_PATH = path.join('C:', 'Users', 'pia', 'OneDrive - Universitaet Bern', 'Projects', 'NetTubo', 'netTubo', 'agentic_assessment', 'batch_results', 'run_20250929_175936', 'batch_run_20250929_175936');
 
 // Cache
 let patientDataCache = null;
 let cacheTimestamp = null;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// Normalize LLM markdown text: unescape literal \n to real newlines, fix CRLF, replace nbsp
+function normalizeMarkdownText(text) {
+  if (text == null) return '';
+  let s = String(text);
+  // Replace literal "\\n" sequences with actual newlines
+  s = s.replace(/\\n/g, '\n');
+  // Normalize CRLF/CR to LF
+  s = s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  // Replace non-breaking spaces
+  s = s.replace(/\u00A0/g, ' ');
+  return s;
+}
 
 // Helper function to load patient data from Excel (legacy; kept for debugging)
 async function loadPatientDataFromExcel() {
@@ -83,7 +139,8 @@ async function loadLegacyRecommendation(patientId) {
     const patientDir = path.join(BATCH_RESULTS_PATH, `patient_${patientId}`);
     const recommendationFile = path.join(patientDir, `patient_${patientId}_therapy_recommendation.json`);
     const rawResponseFile = path.join(patientDir, `patient_${patientId}_therapy_recommendation_raw_response.txt`);
-    
+    const publication = path.join(BATCH_RESULTS_PATH, `patient_${patientId}_complete_workflow.json`);
+
     console.log('Looking for recommendation file:', recommendationFile);
     
     if (!await fs.pathExists(recommendationFile)) {
@@ -91,8 +148,8 @@ async function loadLegacyRecommendation(patientId) {
       return null;
     }
     
-    // Load JSON recommendation
-    const recommendation = await fs.readJson(recommendationFile);
+  // Load JSON recommendation
+  const recJson = await fs.readJson(recommendationFile);
     
     // Load raw response if available
     let rawResponseText = '';
@@ -105,10 +162,16 @@ async function loadLegacyRecommendation(patientId) {
       }
     }
     
-    // Normalize shape similar to workflow file
-    recommendation.raw_response = recommendation.raw_response || rawResponseText || 'No recommendation available';
-    recommendation.source = 'legacy_therapy_recommendation_json';
-    
+    // Prefer explicit markdown field if present
+    const candidate = recJson.markdown || recJson.md || recJson.raw_response || recJson.text || '';
+    const normalized = normalizeMarkdownText(candidate || rawResponseText);
+
+    const recommendation = {
+      ...recJson,
+      raw_response: normalized || 'No recommendation available',
+      source: 'legacy_therapy_recommendation_json'
+    };
+
     return recommendation;
   } catch (error) {
     console.error(`Error loading LLM recommendation for patient ${patientId}:`, error);
@@ -175,9 +238,11 @@ async function loadAllPatientData() {
       let recommendation = null;
       let trialData = null;
       if (workflow && workflow.recommendation_result) {
-        const raw = workflow.recommendation_result.raw_response || workflow.recommendation_result["raw_response"];
+        const rr = workflow.recommendation_result;
+        const candidate = rr.markdown || rr.md || rr.raw_response || rr["raw_response"] || rr.text || '';
+        const normalized = normalizeMarkdownText(candidate);
         recommendation = {
-          raw_response: raw || 'No recommendation available',
+          raw_response: normalized || 'No recommendation available',
           source: 'complete_workflow'
         };
         
@@ -297,10 +362,18 @@ app.get('/api/debug/excel', async (req, res) => {
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
+  const dbStatus = dbConnection.getConnectionStatus();
+  
   res.json({ 
     status: 'OK', 
     message: 'NetTubo Evaluation Backend is running',
     timestamp: new Date().toISOString(),
+    database: {
+      connected: dbStatus.isConnected,
+      name: dbStatus.name,
+      host: dbStatus.host,
+      port: dbStatus.port
+    },
     paths: {
       patientData: PATIENT_DATA_PATH,
       batchResults: BATCH_RESULTS_PATH
@@ -308,18 +381,34 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`NetTubo Evaluation Backend running on port ${PORT}`);
-  console.log(`Patient data path: ${PATIENT_DATA_PATH}`);
-  console.log(`Batch results path: ${BATCH_RESULTS_PATH}`);
-  
-  // Check if paths exist
-  fs.pathExists(PATIENT_DATA_PATH).then(exists => {
-    console.log(`Patient data file exists: ${exists}`);
-  });
-  
-  fs.pathExists(BATCH_RESULTS_PATH).then(exists => {
-    console.log(`Batch results directory exists: ${exists}`);
-  });
-});
+// Initialize database connection and start server
+async function startServer() {
+  try {
+    // Connect to MongoDB
+    await dbConnection.connect();
+    
+    // Start server
+    app.listen(PORT, () => {
+      console.log(`🚀 NetTubo Evaluation Backend running on port ${PORT}`);
+      console.log(`📊 MongoDB: ${dbConnection.isConnected ? '✅ Connected' : '❌ Disconnected'}`);
+      console.log(`📂 Patient data path: ${PATIENT_DATA_PATH}`);
+      console.log(`📁 Batch results path: ${BATCH_RESULTS_PATH}`);
+      
+      // Check if paths exist
+      fs.pathExists(PATIENT_DATA_PATH).then(exists => {
+        console.log(`📋 Patient data file exists: ${exists ? '✅' : '❌'}`);
+      });
+      
+      fs.pathExists(BATCH_RESULTS_PATH).then(exists => {
+        console.log(`📊 Batch results directory exists: ${exists ? '✅' : '❌'}`);
+      });
+    });
+    
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+// Start the server
+startServer();
