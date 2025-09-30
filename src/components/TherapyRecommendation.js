@@ -38,7 +38,6 @@ const TherapyRecommendation = ({ recommendation, trialData = [] }) => {
   if (!recommendation) return null;
 
   const { raw_response } = recommendation;
-  console.log(trialData)
 
   const nctUrlMap = {};
   trialData.forEach(trial => {
