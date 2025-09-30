@@ -75,16 +75,6 @@ const PatientInfo = ({ patient, showExpertRecommendation = false }) => {
         }}>
           {patient.clinical_information || 'No clinical information available'}
         </div>
-        {!expandClinical && (patient.clinical_information || '').length > 0 && (
-          <Button type="link" size="small" onClick={() => setExpandClinical(true)} style={{ paddingLeft: 0 }}>
-            Show more
-          </Button>
-        )}
-        {expandClinical && (
-          <Button type="link" size="small" onClick={() => setExpandClinical(false)} style={{ paddingLeft: 0 }}>
-            Show less
-          </Button>
-        )}
       </div>
 
       <Divider />

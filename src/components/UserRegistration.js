@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Card, Form, Input, Select, Button, Typography, Alert } from 'antd';
+import { Card, Form, Input, Select, Button, Typography, Alert, message } from 'antd';
 import { UserOutlined, TrophyOutlined } from '@ant-design/icons';
 
 const { Title, Paragraph } = Typography;
@@ -8,6 +8,7 @@ const { Option } = Select;
 const UserRegistration = ({ onRegistrationComplete }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const [accessVerified, setAccessVerified] = useState(false);
 
   // Generate unique user ID
   const generateUserId = () => {
@@ -35,6 +36,18 @@ const UserRegistration = ({ onRegistrationComplete }) => {
     setLoading(true);
     
     try {
+      // 1) Verify access code first
+      const accessRes = await fetch('http://localhost:5001/api/access/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: values.accessCode })
+      });
+      if (!accessRes.ok) {
+        const err = await accessRes.json().catch(() => ({}));
+        throw new Error(err.error || 'Access code verification failed');
+      }
+      setAccessVerified(true);
+
       const userId = generateUserId();
       const userData = {
         userId,
@@ -73,8 +86,15 @@ const UserRegistration = ({ onRegistrationComplete }) => {
       
     } catch (error) {
       console.error('Registration error:', error);
-      
-      // Fallback to localStorage if API fails
+      // If access was not verified, do NOT proceed or fallback
+      if (!accessVerified) {
+        message.error(error.message || 'Access code verification failed');
+        return;
+      }
+
+      // Access ok, but DB failed — proceed locally only
+      message.warning('Database unavailable. Proceeding with local-only session.');
+
       const userData = {
         userId: generateUserId(),
         profession: values.profession,
@@ -82,14 +102,11 @@ const UserRegistration = ({ onRegistrationComplete }) => {
         timestamp: new Date().toISOString(),
         sessionStart: new Date().toISOString()
       };
-      
+
       localStorage.setItem('userStudyData', JSON.stringify(userData));
       console.log('Saved to localStorage as fallback:', userData);
-      
-      // Show warning but continue
-      alert('Warning: Could not connect to database. Data saved locally. Please ensure the backend server is running.');
+
       onRegistrationComplete(userData);
-      
     } finally {
       setLoading(false);
     }
@@ -123,6 +140,14 @@ const UserRegistration = ({ onRegistrationComplete }) => {
           onFinish={handleSubmit}
           size="large"
         >
+          <Form.Item
+            name="accessCode"
+            label="Access code"
+            rules={[{ required: true, message: 'Please enter the access code provided by the study team' }]}
+          >
+            <Input.Password placeholder="Enter access code" autoComplete="off" style={{ width: '260px' }} />
+          </Form.Item>
+
           <Form.Item
             name="profession"
             label="What is your profession?"

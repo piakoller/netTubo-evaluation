@@ -1,262 +1,133 @@
+
 import React, { useState } from 'react';
-import { Card, Typography, Button, Space, Tooltip, Divider } from 'antd';
+import { Card, Button, Space, Tooltip } from 'antd';
 import { MedicineBoxOutlined, CopyOutlined, ArrowsAltOutlined, ShrinkOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-const { Title, Text } = Typography;
-
-const TherapyRecommendation = ({ recommendation, patientId, trialData = [] }) => {
-  const [expanded, setExpanded] = useState(false);
-
-  if (!recommendation) return null;
-
-  const { raw_response } = recommendation;
-
-  // Create a map of NCT IDs to their URLs from trial data
-  const nctUrlMap = {};
-  if (trialData && Array.isArray(trialData)) {
-    trialData.forEach(trial => {
-      if (trial.nct_id && trial.url) {
-        nctUrlMap[trial.nct_id] = trial.url;
-      }
-    });
-  }
-
-  const copyText = async (text) => {
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-      }
-    } catch (e) {
-      console.warn('Copy to clipboard failed', e);
-    }
-  };
-
-const sanitizeRaw = (raw) => {
-  if (!raw) return '';
-  let s = String(raw);
-
-  // Normalisiere Linebreaks
-  s = s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  s = s.replace(/\\n/g, '\n');
-  s = s.replace(/\u00A0/g, ' ');
-
-  // Entferne eigene Tags
-  s = s.replace(/<\/?(therapy_recommendation|rationale)>/gi, '');
-
-  // Entferne reine Leerzeilen
-  s = s.replace(/^\s+$/gm, '');
-
-  // Fix für Listen: Marker nicht durch linebreaks zerstören
-  s = s.replace(/(^|\n)\s*(\d+\.)\s*\n\s*/g, '$1$2 ');
-  s = s.replace(/(^|\n)\s*([*+\-])\s*\n\s*/g, '$1$2 ');
-
-  // ⚡ Wichtiger Schritt: Überschriften und Listen behalten ihre Umbrüche,
-  // sonst aber Umbrüche in Fließtext durch Leerzeichen ersetzen
-  s = s.replace(/([^\n])\n(?![#*\-0-9])/g, '$1 ');
-
-  // AGGRESSIVER: Alle mehrfachen Umbrüche auf einen einzigen reduzieren
-  s = s.replace(/\n{2,}/g, '\n');
-
-  // OPTIONAL: Alle verbleibenden Umbrüche durch Leerzeichen ersetzen (für komplett fließenden Text)
-  // s = s.replace(/\n/g, ' ');
-
-  return s.trim();
-};
-
-  const sanitizedRaw = sanitizeRaw(raw_response || '');
-
-  // Component to render markdown with NCT links
-  const MarkdownWithNCTLinks = ({ content }) => {
-    if (!content) return null;
-    
-    // Split content by NCT numbers and create mixed content
-    const nctRegex = /(NCT\d{8})/g;
-    const parts = content.split(nctRegex);
-    
-    const processedContent = parts.map((part, index) => {
-      if (part.match(/^NCT\d{8}$/)) {
-        // This is an NCT number
-        const url = nctUrlMap[part];
-        if (url) {
-          return `[${part}](${url})`;
-        }
-        return part;
-      }
-      return part;
-    }).join('');
-
-    return (
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-        {processedContent}
-      </ReactMarkdown>
-    );
-  };
-
-const markdownComponents = {
-    p: ({ node, ...props }) => (
-      // Reduced margin for tighter spacing
-      <p style={{ margin: '0 0 0.2em 0', whiteSpace: 'normal', lineHeight: '1.3' }} {...props} />
-    ),
-    h1: ({ node, ...props }) => (<h1 style={{ margin: '0 0 0.3em 0', lineHeight: '1.2' }} {...props} />),
-    h2: ({ node, ...props }) => (<h2 style={{ margin: '0 0 0.3em 0', lineHeight: '1.2' }} {...props} />),
-    h3: ({ node, ...props }) => (<h3 style={{ margin: '0 0 0.3em 0', lineHeight: '1.2' }} {...props} />),
-    h4: ({ node, ...props }) => (<h4 style={{ margin: '0 0 0.3em 0', lineHeight: '1.2' }} {...props} />),
-    h5: ({ node, ...props }) => (<h5 style={{ margin: '0 0 0.3em 0', lineHeight: '1.2' }} {...props} />),
-    h6: ({ node, ...props }) => (<h6 style={{ margin: '0 0 0.3em 0', lineHeight: '1.2' }} {...props} />),
-    ul: ({ node, ...props }) => (
-      // Almost zero margin and minimal padding for lists
-      <ul style={{ 
-        margin: '0', 
-        marginBottom: '0.3em',
-        // paddingLeft: '1.2em',
-        listStylePosition: 'outside'
-      }} {...props} />
-    ),
-    ol: ({ node, ...props }) => (
-      // Almost zero margin and minimal padding for ordered lists
-      <ol style={{ 
-        margin: '0', 
-        marginBottom: '0.3em',
-        paddingLeft: '1.2em',
-        listStylePosition: 'outside'
-      }} {...props} />
-    ),
-    li: ({ node, ...props }) => (
-      // Zero margin for list items
-      <li style={{ 
-        margin: '0', 
-        padding: '0',
-        lineHeight: '1.3',
-        marginBottom: '0.1em'
-      }} {...props} />
-    ),
-    // Custom link component with target="_blank" for external links
-    a: ({ node, href, children, ...props }) => (
-      <a 
-        href={href} 
-        target="_blank" 
-        rel="noopener noreferrer"
-        style={{ 
-          color: '#1890ff', 
-          textDecoration: 'underline',
-          fontWeight: href && href.includes('clinicaltrials.gov') ? 'bold' : 'normal'
-        }}
-        title={href && href.includes('clinicaltrials.gov') ? `Open ${children} on ClinicalTrials.gov` : undefined}
-        {...props}
-      >
-        {children}
-      </a>
-    )
-  };
-
-  const parseSections = (raw) => {
-    if (!raw) return { therapy: '', rationale: '', rest: '' };
-    const grab = (tag) => {
-      const m = raw.match(new RegExp(`<${tag}>([\s\S]*?)</${tag}>`, 'i'));
-      return m ? m[1].trim() : '';
-    };
-    const therapy = grab('therapy_recommendation');
-    const rationale = grab('rationale');
-    const rest = raw
-      .replace(new RegExp(`<therapy_recommendation>[\s\S]*?</therapy_recommendation>`, 'ig'), '')
-      .replace(new RegExp(`<rationale>[\s\S]*?</rationale>`, 'ig'), '')
-      .trim();
-    return { therapy, rationale, rest };
-  };
-
-  const sections = parseSections(sanitizedRaw);
-
+// Publications Card Component
+const PublicationsCard = ({ mentionedNCTs = [], nctPublicationMap = {} }) => {
+  if (!mentionedNCTs || mentionedNCTs.length === 0) return null;
+  // Collect publications for each mentioned NCT
+  const pubs = mentionedNCTs
+    .map(nct => ({ nct, publications: nctPublicationMap[nct] || [] }))
+    .filter(item => item.publications.length > 0);
+  if (pubs.length === 0) return null;
   return (
-    <Card 
-      title={
-        <span>
-          <MedicineBoxOutlined style={{ marginRight: '8px' }} />
-          AI Therapy Recommendation
-        </span>
-      }
-      className="recommendation-card"
-      style={{ marginBottom: '16px' }}
-    >
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <Title level={5} style={{ margin: 0 }}>LLM Response</Title>
-          <Space size="small">
-            <Tooltip title="Copy response">
-              <Button
-                size="small"
-                type="text"
-                icon={<CopyOutlined />}
-                onClick={() => copyText(raw_response || '')}
-              />
-            </Tooltip>
-            <Tooltip title={expanded ? 'Collapse' : 'Expand'}>
-              <Button
-                size="small"
-                type="text"
-                icon={expanded ? <ShrinkOutlined /> : <ArrowsAltOutlined />}
-                onClick={() => setExpanded((v) => !v)}
-              />
-            </Tooltip>
-          </Space>
-        </div>
-        <div 
-          className="recommendation-content" 
-          style={{ 
-            maxHeight: expanded ? 'none' : '500px', 
-            overflowY: 'auto', 
-            border: '1px solid #e8e8e8', 
-            padding: '16px', 
-            borderRadius: '6px',
-            backgroundColor: '#fafafa',
-            fontFamily: 'inherit',
-            lineHeight: '1.3'  // Reduced from 1.6 to 1.3 for tighter spacing
-          }}
-        >
-          {sections.therapy ? (
-            <div style={{ marginBottom: 16 }}>
-              <Title level={5} style={{ marginTop: 0 }}>Therapy Recommendation</Title>
-              <MarkdownWithNCTLinks content={sections.therapy} />
-            </div>
-          ) : null}
-
-          {sections.rationale ? (
-            <div style={{ marginTop: sections.therapy ? 8 : 0 }}>
-              {sections.therapy ? <Divider /> : null}
-              <Title level={5} style={{ marginTop: 0 }}>Rationale</Title>
-              <MarkdownWithNCTLinks content={sections.rationale} />
-            </div>
-          ) : null}
-
-          {!sections.therapy && !sections.rationale ? (
-            sanitizedRaw ? (
-              <MarkdownWithNCTLinks content={sanitizedRaw} />
-            ) : (
-              <Text>No recommendation available</Text>
-            )
-          ) : null}
-        </div>
-        {!expanded && (raw_response || '').length > 0 && (
-          <Button type="link" size="small" onClick={() => setExpanded(true)} style={{ paddingLeft: 0 }}>
-            Show more
-          </Button>
-        )}
-        {expanded && (
-          <Button type="link" size="small" onClick={() => setExpanded(false)} style={{ paddingLeft: 0 }}>
-            Show less
-          </Button>
-        )}
-      </div>
+    <Card style={{ marginTop: 16, marginBottom: 16 }} title={<span><MedicineBoxOutlined /> Publications Used</span>}>
+      <ul style={{ paddingLeft: 20 }}>
+        {pubs.map(({ nct, publications }) => (
+          <li key={nct}>
+            <strong>{nct}:</strong>
+            <ul style={{ paddingLeft: 16 }}>
+              {publications.map((pub, idx) => (
+                <li key={idx}>
+                  <a href={pub.url} target="_blank" rel="noopener noreferrer">{pub.title}</a>
+                  {pub.source ? <span style={{ marginLeft: 8, color: '#888' }}>({pub.source})</span> : null}
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
     </Card>
   );
 };
+
+const TherapyRecommendation = ({ recommendation, trialData = [] }) => {
+  if (!recommendation) return null;
+
+  const { raw_response } = recommendation;
+  console.log(trialData)
+
+  const nctUrlMap = {};
+  trialData.forEach(trial => {
+    if (trial.nct_id && trial.url) nctUrlMap[trial.nct_id] = trial.url;
+  });
+
+// Map NCT IDs to array of publication objects { title, url, source }
+const nctPublicationMap = {};
+trialData.forEach(trial => {
+  const nctId = trial.nct_id;
+  const online = trial.publication_analysis?.online_search_results || {};
+  const sources = [
+    { key: 'pubmed', arr: online.pubmed?.publications, label: 'PubMed' },
+    { key: 'onclive', arr: online.onclive?.articles, label: 'OncLive' },
+    // { key: 'google_scholar', arr: online.google_scholar?.articles, label: 'Google Scholar' },
+    { key: 'congress_abstracts', arr: online.congress_abstracts?.abstracts, label: 'Congress Abstracts' }
+  ];
+  let allPubs = [];
+  sources.forEach(src => {
+    if (Array.isArray(src.arr) && src.arr.length > 0) {
+      allPubs = allPubs.concat(
+        src.arr.map(pub => ({
+          title: pub.title || pub.abstract_text || 'Publication',
+          url: pub.url || pub.link || '',
+          source: src.label
+        }))
+      );
+    }
+  });
+  if (nctId && allPubs.length > 0) {
+    nctPublicationMap[nctId] = allPubs;
+  }
+});
+
+  const copyText = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      console.warn('Copy failed');
+    }
+  };
+
+  const sanitizedRaw = (raw_response || '')
+    .replace(/<\/?(therapy_recommendation|rationale)>/gi, '')
+    .replace(/\\n/g, '\n')
+    .trim();
+
+  const MarkdownWithNCTLinks = ({ content }) => {
+    if (!content) return null;
+    const nctRegex = /(NCT\d{8})/g;
+    const parts = content.split(nctRegex);
+    const processed = parts.map(p => nctUrlMap[p] ? `[${p}](${nctUrlMap[p]})` : p).join('');
+    // Custom link renderer to open in new tab
+    const components = {
+      a: ({node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" />
+    };
+    return <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{processed}</ReactMarkdown>;
+  };
+
+
+  // Find all NCT numbers mentioned in the markdown
+  const mentionedNCTs = Array.from(new Set((sanitizedRaw.match(/NCT\d{8}/g) || [])));
+
+  return (
+    <>
+      <Card
+        title={<span><MedicineBoxOutlined /> AI Therapy Recommendation</span>}
+        style={{ marginBottom: 16 }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <Space size="small">
+            <Tooltip title="Copy response">
+              <Button size="small" type="text" icon={<CopyOutlined />} onClick={() => copyText(raw_response || '')} />
+            </Tooltip>
+          </Space>
+        </div>
+
+        <div style={{
+          border: '1px solid #e8e8e8',
+          padding: 16,
+          borderRadius: 6,
+          backgroundColor: '#fafafa'
+        }}>
+          {sanitizedRaw ? <MarkdownWithNCTLinks content={sanitizedRaw} /> : <p>No recommendation available</p>}
+        </div>
+      </Card>
+      <PublicationsCard mentionedNCTs={mentionedNCTs} nctPublicationMap={nctPublicationMap} />
+    </>
+  );
+}
 
 export default TherapyRecommendation;
