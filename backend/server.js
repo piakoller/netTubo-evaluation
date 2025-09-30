@@ -55,8 +55,26 @@ app.use('/api/users', userRoutes);
 app.use('/api/evaluations', evaluationRoutes);
 
 // Data paths
-const PATIENT_DATA_PATH = path.join('C:', 'Users', 'pia', 'OneDrive - Universitaet Bern', 'Projects', 'NetTubo', 'netTubo', 'data', 'ExpertCases.xlsx');
-const BATCH_RESULTS_PATH = path.join('C:', 'Users', 'pia', 'OneDrive - Universitaet Bern', 'Projects', 'NetTubo', 'netTubo', 'agentic_assessment', 'batch_results', 'run_20250929_175936', 'batch_run_20250929_175936');
+// const PATIENT_DATA_PATH = path.join('C:', 'Users', 'pia', 'OneDrive - Universitaet Bern', 'Projects', 'NetTubo', 'netTubo', 'data', 'ExpertCases.xlsx');
+// const BATCH_RESULTS_PATH = path.join('C:', 'Users', 'pia', 'OneDrive - Universitaet Bern', 'Projects', 'NetTubo', 'netTubo', 'agentic_assessment', 'batch_results', 'run_20250929_175936', 'batch_run_20250929_175936');
+
+let PATIENT_DATA_PATH;
+if (process.env.PATIENT_DATA_PATH && fs.existsSync(process.env.PATIENT_DATA_PATH)) {
+  PATIENT_DATA_PATH = process.env.PATIENT_DATA_PATH;
+} else if (process.env.PATIENT_DATA_SECRET && fs.existsSync(`/etc/secrets/${process.env.PATIENT_DATA_SECRET}`)) {
+  PATIENT_DATA_PATH = `/etc/secrets/${process.env.PATIENT_DATA_SECRET}`;
+} else {
+  PATIENT_DATA_PATH = path.join('C:', 'Users', 'pia', 'OneDrive - Universitaet Bern', 'Projects', 'NetTubo', 'netTubo', 'data', 'ExpertCases.xlsx');
+}
+
+let BATCH_RESULTS_PATH;
+if (process.env.BATCH_RESULTS_PATH && fs.existsSync(process.env.BATCH_RESULTS_PATH)) {
+  BATCH_RESULTS_PATH = process.env.BATCH_RESULTS_PATH;
+} else if (process.env.BATCH_RESULTS_SECRET && fs.existsSync(`/etc/secrets/${process.env.BATCH_RESULTS_SECRET}`)) {
+  BATCH_RESULTS_PATH = `/etc/secrets/${process.env.BATCH_RESULTS_SECRET}`;
+} else {
+  BATCH_RESULTS_PATH = path.join('C:', 'Users', 'pia', 'OneDrive - Universitaet Bern', 'Projects', 'NetTubo', 'netTubo', 'agentic_assessment', 'batch_results', 'run_20250929_175936', 'batch_run_20250929_175936');
+}
 
 // Cache
 let patientDataCache = null;
@@ -139,23 +157,36 @@ async function loadLegacyRecommendation(patientId) {
     const patientDir = path.join(BATCH_RESULTS_PATH, `patient_${patientId}`);
     const recommendationFile = path.join(patientDir, `patient_${patientId}_therapy_recommendation.json`);
     const rawResponseFile = path.join(patientDir, `patient_${patientId}_therapy_recommendation_raw_response.txt`);
-    const publication = path.join(BATCH_RESULTS_PATH, `patient_${patientId}_complete_workflow.json`);
 
     console.log('Looking for recommendation file:', recommendationFile);
     
-    if (!await fs.pathExists(recommendationFile)) {
-      console.warn(`Recommendation file not found for patient ${patientId}: ${recommendationFile}`);
-      return null;
+    // If the recommendation JSON isn't in the patient directory, try the batch root
+    let recommendationFileToLoad = recommendationFile;
+    let rawResponseFileToLoad = rawResponseFile;
+
+    if (!await fs.pathExists(recommendationFileToLoad)) {
+      const recommendationAtRoot = path.join(BATCH_RESULTS_PATH, `patient_${patientId}_therapy_recommendation.json`);
+      const rawResponseAtRoot = path.join(BATCH_RESULTS_PATH, `patient_${patientId}_therapy_recommendation_raw_response.txt`);
+      if (await fs.pathExists(recommendationAtRoot)) {
+        console.warn(`Recommendation file not found in patient dir; using root file for patient ${patientId}: ${recommendationAtRoot}`);
+        recommendationFileToLoad = recommendationAtRoot;
+      } else {
+        console.warn(`Recommendation file not found for patient ${patientId} in dir or root: checked ${recommendationFile} and ${recommendationAtRoot}`);
+        return null;
+      }
+      if (await fs.pathExists(rawResponseAtRoot)) {
+        rawResponseFileToLoad = rawResponseAtRoot;
+      }
     }
-    
-  // Load JSON recommendation
-  const recJson = await fs.readJson(recommendationFile);
+
+    // Load JSON recommendation
+    const recJson = await fs.readJson(recommendationFileToLoad);
     
     // Load raw response if available
     let rawResponseText = '';
-    if (await fs.pathExists(rawResponseFile)) {
+    if (await fs.pathExists(rawResponseFileToLoad)) {
       try {
-        rawResponseText = await fs.readFile(rawResponseFile, 'utf8');
+        rawResponseText = await fs.readFile(rawResponseFileToLoad, 'utf8');
       } catch (error) {
         console.warn(`Could not read raw response file for patient ${patientId}:`, error.message);
         rawResponseText = 'Raw response file not available';
@@ -182,14 +213,22 @@ async function loadLegacyRecommendation(patientId) {
 // Helper: Load complete workflow JSON for a given patient
 async function loadWorkflowForPatient(patientId) {
   try {
+    // First try patient directory
     const patientDir = path.join(BATCH_RESULTS_PATH, `patient_${patientId}`);
-    const workflowFile = path.join(patientDir, `patient_${patientId}_complete_workflow.json`);
-    if (!await fs.pathExists(workflowFile)) {
-      console.warn(`Complete workflow file not found for patient ${patientId}: ${workflowFile}`);
-      return null;
+    const workflowFileInDir = path.join(patientDir, `patient_${patientId}_complete_workflow.json`);
+
+    if (await fs.pathExists(workflowFileInDir)) {
+      return await fs.readJson(workflowFileInDir);
     }
-    const workflow = await fs.readJson(workflowFile);
-    return workflow;
+
+    // Fallback: individual file uploaded to BATCH_RESULTS_PATH root
+    const workflowFileAtRoot = path.join(BATCH_RESULTS_PATH, `patient_${patientId}_complete_workflow.json`);
+    if (await fs.pathExists(workflowFileAtRoot)) {
+      return await fs.readJson(workflowFileAtRoot);
+    }
+
+    console.warn(`Complete workflow file not found for patient ${patientId} in dir or root`);
+    return null;
   } catch (error) {
     console.error(`Error loading workflow for patient ${patientId}:`, error);
     return null;
@@ -211,10 +250,11 @@ async function loadAllPatientData() {
     }
 
     const entries = await fs.readdir(BATCH_RESULTS_PATH, { withFileTypes: true });
-    const patientDirs = entries.filter(e => e.isDirectory() && e.name.startsWith('patient_'));
 
     const patientData = {};
 
+    // First, find patient directories like patient_<id>/
+    const patientDirs = entries.filter(e => e.isDirectory() && e.name.startsWith('patient_'));
     for (const dirent of patientDirs) {
       const idPart = dirent.name.replace('patient_', '').trim();
       const patientId = idPart;
@@ -267,6 +307,63 @@ async function loadAllPatientData() {
       };
 
       console.log(`Processed patient ${patientId} (workflow=${!!workflow}, rec=${!!recommendation})`);
+    }
+
+    // Next, look for standalone workflow JSON files at the BATCH_RESULTS_PATH root
+    const workflowFileRegex = /^patient_(\d+)_complete_workflow\.json$/i;
+    for (const dirent of entries) {
+      if (!dirent.isFile()) continue;
+      const m = dirent.name.match(workflowFileRegex);
+      if (!m) continue;
+      const patientId = m[1];
+      // Skip if already processed via directory
+      if (patientData[patientId]) continue;
+
+      // Load workflow and build the patient record (similar to above)
+      const workflow = await loadWorkflowForPatient(patientId);
+      let clinicalInfo = undefined;
+      let clinicalQuestion = undefined;
+      let expertRecommendation = undefined;
+      let originalPatientData = undefined;
+
+      if (workflow && workflow.guidelines_result && workflow.guidelines_result.patient_data) {
+        const pd = workflow.guidelines_result.patient_data;
+        clinicalInfo = pd.clinical_information || pd.ClinicalInformation || pd["clinical_information"];
+        clinicalQuestion = pd.question_for_tumorboard || pd['question_for_tumorboard'] || pd.ClinicalQuestion || pd['Clinical Question'];
+        expertRecommendation = pd.expert_recommendation || pd['expert_recommendation'];
+        originalPatientData = pd;
+      }
+
+      // Load recommendation raw text from workflow or legacy
+      let recommendation = null;
+      let trialData = null;
+      if (workflow && workflow.recommendation_result) {
+        const rr = workflow.recommendation_result;
+        const candidate = rr.markdown || rr.md || rr.raw_response || rr["raw_response"] || rr.text || '';
+        const normalized = normalizeMarkdownText(candidate);
+        recommendation = {
+          raw_response: normalized || 'No recommendation available',
+          source: 'complete_workflow'
+        };
+        if (workflow.trial_matching_result && workflow.trial_matching_result.relevant_trials) {
+          trialData = workflow.trial_matching_result.relevant_trials;
+        }
+      } else {
+        recommendation = await loadLegacyRecommendation(patientId);
+      }
+
+      patientData[patientId] = {
+        id: patientId.toString(),
+        name: `Patient ${patientId}`,
+        clinical_information: clinicalInfo || 'No clinical information available',
+        clinical_question: clinicalQuestion || 'No clinical question provided',
+        expert_recommendation: expertRecommendation,
+        original_patient_data: originalPatientData,
+        recommendation,
+        trial_data: trialData
+      };
+
+      console.log(`Processed patient ${patientId} (root file, workflow=${!!workflow}, rec=${!!recommendation})`);
     }
     
     // Cache the result
