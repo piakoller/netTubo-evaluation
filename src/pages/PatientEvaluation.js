@@ -28,27 +28,15 @@ const PatientEvaluation = ({ userData }) => {
   };
 
   // Helper: pick next patient id
-  // Preference order:
-  // 1) Next higher ID than current among NOT completed
-  // 2) Smallest ID among NOT completed
-  // 3) null if all completed or none
+  // Always start with Patient 1 and proceed sequentially: 1 → 2 → 3
+  // Skip completed patients and always pick the lowest numbered incomplete patient
   const pickNextPatientId = (patientsMap, completedSet, currentId = null) => {
     const sorted = getSortedIds(patientsMap);
     const notCompleted = sorted.filter((id) => !completedSet.has(id));
     if (notCompleted.length === 0) return null;
 
-    if (currentId != null) {
-      const numeric = /^\d+$/.test(String(currentId));
-      if (numeric) {
-        const cur = Number(currentId);
-        const nextHigher = notCompleted.find((id) => Number(id) > cur);
-        if (nextHigher) return nextHigher;
-      } else {
-        const idx = notCompleted.findIndex((id) => id === currentId);
-        if (idx >= 0 && idx + 1 < notCompleted.length) return notCompleted[idx + 1];
-      }
-    }
-    // Fallback to smallest available
+    // Always return the smallest (first) available patient ID
+    // This ensures we go: 1 → 2 → 3 in order
     return notCompleted[0];
   };
 
@@ -132,6 +120,9 @@ const PatientEvaluation = ({ userData }) => {
   const handlePatientSelect = (patientId) => {
     setSelectedPatientId(patientId);
     setSelectedPatient(patients[patientId]);
+    
+    // Scroll to top when selecting a new patient
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Auto-select if selection becomes empty or invalid due to data refresh
