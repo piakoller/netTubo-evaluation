@@ -89,11 +89,28 @@ const UserRegistration = ({ onRegistrationComplete }) => {
       }
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorText = await response.text().catch(() => '');
+        let errorData = {};
+        try {
+          errorData = errorText ? JSON.parse(errorText) : {};
+        } catch (e) {
+          // non-JSON error body
+          errorData = { error: errorText || 'Failed to register user' };
+        }
         throw new Error(errorData.error || 'Failed to register user');
       }
 
-      const result = await response.json();
+      // Some deployments (or 204 responses) may return an empty body. Safely handle non-JSON or empty responses.
+      let result = {};
+      const respText = await response.text().catch(() => '');
+      if (respText) {
+        try {
+          result = JSON.parse(respText);
+        } catch (e) {
+          console.warn('Non-JSON response from registration endpoint, preserving raw text');
+          result = { raw: respText };
+        }
+      }
       console.log('User registered in database:', result);
       
       // Still store in localStorage for session management (as backup)
