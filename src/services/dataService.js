@@ -1,7 +1,12 @@
 // Data service for loading LLM therapy recommendatijs
 class DataService {
   constructor() {
-    this.baseURL = 'http://localhost:5001/api';
+    // Allow deploying frontend and backend to different hosts. Configure backend via REACT_APP_API_BASE.
+    // If REACT_APP_API_BASE is not set, use relative '/api' so same-origin requests work.
+    const RAW_API_BASE = process.env.REACT_APP_API_BASE || '';
+    const API_HOST = RAW_API_BASE.replace(/\/$/, '');
+    this.baseURL = API_HOST ? `${API_HOST}/api` : '/api';
+    console.log('DataService using API base URL:', this.baseURL);
     this.cache = new Map();
     this.cacheExpiry = 5 * 60 * 1000; // 5 minutes
   }
@@ -38,8 +43,8 @@ class DataService {
       console.error('Error loading patient recommendations:', error);
       
       // If backend is not available, show helpful error message
-      if (error.message.includes('fetch')) {
-        throw new Error('Backend server is not running. Please start the backend server on port 5001.');
+      if (error instanceof TypeError || (error.message && error.message.toLowerCase().includes('failed to fetch'))) {
+        throw new Error(`Backend server is not reachable at ${this.baseURL}. Please ensure the backend is running and accessible (CORS, network).`);
       }
       
       throw error;
