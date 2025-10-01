@@ -10,6 +10,11 @@ const UserRegistration = ({ onRegistrationComplete }) => {
   const [loading, setLoading] = useState(false);
   const [accessVerified, setAccessVerified] = useState(false);
 
+  // API base can be configured via REACT_APP_API_BASE (omit trailing slash),
+  // fallback to empty string so relative paths are used in same-origin setups.
+  const RAW_API_BASE = process.env.REACT_APP_API_BASE || '';
+  const API_BASE = RAW_API_BASE.replace(/\/$/, '');
+
   // Generate unique user ID
   const generateUserId = () => {
     const timestamp = Date.now();
@@ -37,11 +42,18 @@ const UserRegistration = ({ onRegistrationComplete }) => {
     
     try {
       // 1) Verify access code first
-      const accessRes = await fetch('http://localhost:5001/api/access/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: values.accessCode })
-      });
+      let accessRes;
+      try {
+        accessRes = await fetch(`${API_BASE}/api/access/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: values.accessCode })
+        });
+      } catch (netErr) {
+        // Network-level error (CORS, server unreachable, DNS, etc.)
+        throw new Error(`Network error while verifying access code: ${netErr.message}`);
+      }
+
       if (!accessRes.ok) {
         const err = await accessRes.json().catch(() => ({}));
         throw new Error(err.error || 'Access code verification failed');
@@ -58,20 +70,26 @@ const UserRegistration = ({ onRegistrationComplete }) => {
       };
 
       // Save to database via API
-      const response = await fetch('http://localhost:5001/api/users/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId: userData.userId,
-          profession: userData.profession,
-          yearsExperience: parseInt(userData.yearsExperience)
-        })
-      });
+      let response;
+      try {
+        response = await fetch(`${API_BASE}/api/users/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId: userData.userId,
+            profession: userData.profession,
+            yearsExperience: parseInt(userData.yearsExperience)
+          })
+        });
+      } catch (netErr) {
+        // Network-level error during registration
+        throw new Error(`Network error while registering user: ${netErr.message}`);
+      }
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || 'Failed to register user');
       }
 
