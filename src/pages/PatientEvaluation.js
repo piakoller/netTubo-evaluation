@@ -41,8 +41,13 @@ const PatientEvaluation = ({ userData }) => {
   };
 
   useEffect(() => {
-    loadPatients();
-    loadCompletedEvaluations();
+    // Load completed evaluations first, then patients
+    // This ensures proper auto-selection on page load
+    const loadData = async () => {
+      await loadCompletedEvaluations();
+      await loadPatients();
+    };
+    loadData();
   }, []);
 
   const loadPatients = async () => {
@@ -51,11 +56,8 @@ const PatientEvaluation = ({ userData }) => {
       const patientData = await dataService.loadPatientRecommendations();
       setPatients(patientData);
 
-      // Auto-select a patient if none selected or current selection is invalid
-      const nextId = pickNextPatientId(patientData, completedEvaluations, selectedPatientId);
-      if (!selectedPatientId || !patientData[selectedPatientId]) {
-        if (nextId) handlePatientSelect(nextId);
-      }
+      // Auto-selection will be handled by the useEffect that watches for changes
+      // in patients and completedEvaluations
     } catch (error) {
       message.error('Failed to load patient data');
       console.error('Error loading patients:', error);
@@ -126,12 +128,16 @@ const PatientEvaluation = ({ userData }) => {
   };
 
   // Auto-select if selection becomes empty or invalid due to data refresh
+  // Always ensures Patient 1 is selected first (if not completed), then Patient 2, etc.
   useEffect(() => {
     const current = selectedPatientId;
     const currentExists = current && patients[current];
-    if (!selectedPatient || !currentExists) {
+    
+    // If no patient is selected, or current selection doesn't exist, or both patients and completedEvaluations are loaded
+    if (!selectedPatient || !currentExists || (Object.keys(patients).length > 0 && !selectedPatientId)) {
       const nextId = pickNextPatientId(patients, completedEvaluations, currentExists ? current : null);
       if (nextId && nextId !== current) {
+        console.log(`Auto-selecting next patient: ${nextId}`);
         handlePatientSelect(nextId);
       }
     }
