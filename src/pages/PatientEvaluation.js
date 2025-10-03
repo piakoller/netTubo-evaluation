@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, Select, Typography, Row, Col, Button, message, Progress, Alert } from 'antd';
-import { UserOutlined, MedicineBoxOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { UserOutlined, MedicineBoxOutlined, CheckCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import PatientInfo from '../components/PatientInfo';
 import TherapyRecommendation from '../components/TherapyRecommendation';
 import EvaluationForm from '../components/EvaluationForm';
@@ -16,6 +16,7 @@ const PatientEvaluation = ({ userData }) => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [completedEvaluations, setCompletedEvaluations] = useState(new Set());
+  const [studyCompleted, setStudyCompleted] = useState(false);
 
   // Helper: normalize and sort patient IDs numerically when possible
   const getSortedIds = (obj) => {
@@ -30,7 +31,7 @@ const PatientEvaluation = ({ userData }) => {
   // Helper: pick next patient id
   // Always start with Patient 1 and proceed sequentially: 1 → 2 → 3
   // Skip completed patients and always pick the lowest numbered incomplete patient
-  const pickNextPatientId = (patientsMap, completedSet, currentId = null) => {
+  const pickNextPatientId = useCallback((patientsMap, completedSet, currentId = null) => {
     const sorted = getSortedIds(patientsMap);
     const notCompleted = sorted.filter((id) => !completedSet.has(id));
     if (notCompleted.length === 0) return null;
@@ -38,35 +39,9 @@ const PatientEvaluation = ({ userData }) => {
     // Always return the smallest (first) available patient ID
     // This ensures we go: 1 → 2 → 3 in order
     return notCompleted[0];
-  };
-
-  useEffect(() => {
-    // Load completed evaluations first, then patients
-    // This ensures proper auto-selection on page load
-    const loadData = async () => {
-      await loadCompletedEvaluations();
-      await loadPatients();
-    };
-    loadData();
   }, []);
 
-  const loadPatients = async () => {
-    try {
-      setLoading(true);
-      const patientData = await dataService.loadPatientRecommendations();
-      setPatients(patientData);
-
-      // Auto-selection will be handled by the useEffect that watches for changes
-      // in patients and completedEvaluations
-    } catch (error) {
-      message.error('Failed to load patient data');
-      console.error('Error loading patients:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadCompletedEvaluations = async () => {
+  const loadCompletedEvaluations = useCallback(async () => {
     try {
       // Try to load from database first
       if (userData?.userId) {
@@ -87,6 +62,32 @@ const PatientEvaluation = ({ userData }) => {
     const completed = localStorage.getItem(`completedEvaluations_${userData?.userId}`);
     if (completed) {
       setCompletedEvaluations(new Set(JSON.parse(completed)));
+    }
+  }, [userData?.userId]);
+
+  useEffect(() => {
+    // Load completed evaluations first, then patients
+    // This ensures proper auto-selection on page load
+    const loadData = async () => {
+      await loadCompletedEvaluations();
+      await loadPatients();
+    };
+    loadData();
+  }, [loadCompletedEvaluations]);
+
+  const loadPatients = async () => {
+    try {
+      setLoading(true);
+      const patientData = await dataService.loadPatientRecommendations();
+      setPatients(patientData);
+
+      // Auto-selection will be handled by the useEffect that watches for changes
+      // in patients and completedEvaluations
+    } catch (error) {
+      message.error('Failed to load patient data');
+      console.error('Error loading patients:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -119,13 +120,13 @@ const PatientEvaluation = ({ userData }) => {
     }
   };
 
-  const handlePatientSelect = (patientId) => {
+  const handlePatientSelect = useCallback((patientId) => {
     setSelectedPatientId(patientId);
     setSelectedPatient(patients[patientId]);
     
     // Scroll to top when selecting a new patient
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  }, [patients]);
 
   // Auto-select if selection becomes empty or invalid due to data refresh
   // Always ensures Patient 1 is selected first (if not completed), then Patient 2, etc.
@@ -141,7 +142,7 @@ const PatientEvaluation = ({ userData }) => {
         handlePatientSelect(nextId);
       }
     }
-  }, [patients, selectedPatient, selectedPatientId, completedEvaluations]);
+  }, [patients, selectedPatient, selectedPatientId, completedEvaluations, pickNextPatientId, handlePatientSelect]);
 
   const handleEvaluationSubmit = async (evaluationData) => {
     try {
@@ -163,19 +164,29 @@ const PatientEvaluation = ({ userData }) => {
       
       message.success('Evaluation submitted successfully!');
       
-      // Auto-select next patient if available
+      // Check if there are more patients available
       const nextPatient = pickNextPatientId(patients, new Set([...completedEvaluations, selectedPatientId]), selectedPatientId);
 
-      if (nextPatient) {
-        setTimeout(() => {
-          handlePatientSelect(nextPatient);
-          message.info('Loading next patient case...');
-        }, 1500);
+      // If there's no expert recommendation, handle progression immediately
+      if (!selectedPatient.expert_recommendation) {
+        if (nextPatient) {
+          // There are more patients - proceed to next one
+          setTimeout(() => {
+            handlePatientSelect(nextPatient);
+            message.info('Loading next patient case...');
+          }, 1500);
+        } else {
+          // This is the last patient - show completion
+          setTimeout(() => {
+            setSelectedPatientId(null);
+            setSelectedPatient(null);
+            setStudyCompleted(true);
+            message.success('All evaluations completed! Thank you for your participation.');
+          }, 1500);
+        }
       } else {
-        // All patients completed
-        setSelectedPatientId(null);
-        setSelectedPatient(null);
-        message.success('All evaluations completed! Thank you for your participation.');
+        // There is an expert recommendation - the expert evaluation modal will handle progression
+        console.log('Expert recommendation exists - waiting for expert evaluation');
       }
       
     } catch (error) {
@@ -183,6 +194,64 @@ const PatientEvaluation = ({ userData }) => {
       console.error('Error submitting evaluation:', error);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleExpertEvaluationSubmit = async (expertEvaluationData) => {
+    try {
+      const expertEvaluation = {
+        patient_id: selectedPatientId,
+        user_data: userData,
+        timestamp: new Date().toISOString(),
+        evaluation_type: 'expert_recommendation',
+        ...expertEvaluationData
+      };
+
+      // Save expert evaluation to database
+      await dataService.saveEvaluation(expertEvaluation);
+      
+      message.success('Expert evaluation submitted successfully!');
+      
+      // Now handle next patient or completion
+      const nextPatient = pickNextPatientId(patients, new Set([...completedEvaluations, selectedPatientId]), selectedPatientId);
+
+      if (nextPatient) {
+        // There are more patients - proceed to next one
+        setTimeout(() => {
+          handlePatientSelect(nextPatient);
+          message.info('Loading next patient case...');
+        }, 1500);
+      } else {
+        // All patients completed - show completion screen
+        setTimeout(() => {
+          setSelectedPatientId(null);
+          setSelectedPatient(null);
+          setStudyCompleted(true);
+          message.success('All evaluations completed! Thank you for your participation.');
+        }, 1500);
+      }
+      
+    } catch (error) {
+      console.error('Error submitting expert evaluation:', error);
+      message.error('Failed to submit expert evaluation. Please try again.');
+    }
+  };
+
+  const handleRestartStudy = () => {
+    // Clear all completed evaluations
+    setCompletedEvaluations(new Set());
+    setStudyCompleted(false);
+    
+    // Clear localStorage
+    if (userData?.userId) {
+      localStorage.removeItem(`completedEvaluations_${userData.userId}`);
+    }
+    
+    // Reset to first patient
+    const firstPatientId = pickNextPatientId(patients, new Set(), null);
+    if (firstPatientId) {
+      handlePatientSelect(firstPatientId);
+      message.info('Study restarted. Starting with Patient 1...');
     }
   };
 
@@ -250,9 +319,6 @@ const PatientEvaluation = ({ userData }) => {
             >
               {Object.keys(patients).map(patientId => {
                 const isCompleted = completedEvaluations.has(patientId);
-                const p = patients[patientId] || {};
-                const q = (p.clinical_question || '').toString().trim();
-                const shortQ = q ? (q.length > 80 ? q.slice(0, 77) + '…' : q) : '';
                 const label = `Patient ${patientId}`;
                 return (
                   <Option key={patientId} value={patientId} disabled={isCompleted}>
@@ -288,18 +354,59 @@ const PatientEvaluation = ({ userData }) => {
             <Title level={3}>Evaluation Form</Title>
             <EvaluationForm 
               onSubmit={handleEvaluationSubmit}
+              onExpertSubmit={handleExpertEvaluationSubmit}
               loading={submitting}
+              expertRecommendation={selectedPatient.expert_recommendation}
             />
           </Card>
         </>
       )}
 
-      {!selectedPatient && Object.keys(patients).length > 0 && (
+      {!selectedPatient && Object.keys(patients).length > 0 && !studyCompleted && (
         <Card style={{ marginTop: '24px', textAlign: 'center', padding: '48px' }}>
           <UserOutlined style={{ fontSize: '48px', color: '#ccc', marginBottom: '16px' }} />
           <Title level={3} style={{ color: '#ccc' }}>
             Select a patient to begin evaluation
           </Title>
+        </Card>
+      )}
+
+      {!selectedPatient && studyCompleted && (
+        <Card style={{ 
+          marginTop: '24px', 
+          textAlign: 'center', 
+          padding: '48px',
+          border: '2px solid #52c41a',
+          backgroundColor: '#f6ffed'
+        }}>
+          <CheckCircleOutlined style={{ 
+            fontSize: '64px', 
+            color: '#52c41a', 
+            marginBottom: '24px' 
+          }} />
+          <Title level={2} style={{ color: '#52c41a', marginBottom: '16px' }}>
+            🎉 Study Completed!
+          </Title>
+          <Typography.Paragraph style={{ 
+            fontSize: '16px', 
+            color: '#389e0d', 
+            marginBottom: '32px',
+            maxWidth: '600px',
+            margin: '0 auto 32px auto'
+          }}>
+            Thank you for your participation in the NetTubo evaluation study! 
+            Your evaluations have been successfully submitted and will contribute to 
+            advancing AI-assisted clinical decision making in oncology.
+          </Typography.Paragraph>
+          <Button 
+            type="primary" 
+            size="large"
+            icon={<ReloadOutlined />}
+            onClick={handleRestartStudy}
+            style={{ minWidth: '200px' }}
+          >
+            Restart Study
+          </Button>
         </Card>
       )}
     </div>

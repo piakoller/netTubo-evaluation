@@ -14,7 +14,7 @@ const PublicationsCard = ({ mentionedNCTs = [], nctPublicationMap = {} }) => {
     .filter(item => item.publications.length > 0);
   if (pubs.length === 0) return null;
   return (
-    <Card style={{ marginTop: 16, marginBottom: 16 }} title={<span><MedicineBoxOutlined /> Publications Used</span>}>
+    <Card style={{ marginTop: 16, marginBottom: 16 }} title={<span><MedicineBoxOutlined /> Publications Used for  Agentic AI Recommendation</span>}>
       <ul style={{ paddingLeft: 20 }}>
         {pubs.map(({ nct, publications }) => (
           <li key={nct}>
@@ -35,7 +35,7 @@ const PublicationsCard = ({ mentionedNCTs = [], nctPublicationMap = {} }) => {
 };
 
 // Single Recommendation Component
-const SingleRecommendation = ({ title, recommendation, nctUrlMap = {}, showPublications = false, trialData = [] }) => {
+const SingleRecommendation = ({ title, description, recommendation, nctUrlMap = {}, showPublications = false, trialData = [] }) => {
   const copyText = async (text) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -47,6 +47,7 @@ const SingleRecommendation = ({ title, recommendation, nctUrlMap = {}, showPubli
   if (!recommendation) {
     return (
       <Card title={title} style={{ marginBottom: 16 }}>
+        {description && description}
         <p>No recommendation available</p>
       </Card>
     );
@@ -110,6 +111,12 @@ const SingleRecommendation = ({ title, recommendation, nctUrlMap = {}, showPubli
   return (
     <>
       <Card title={title} style={{ marginBottom: 16 }}>
+        {description && (
+          <div style={{ marginBottom: 16 }}>
+            {description}
+          </div>
+        )}
+        
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
           <Space size="small">
             <Tooltip title="Copy response">
@@ -150,26 +157,22 @@ const TherapyRecommendation = ({ recommendation, baselineRecommendation, trialDa
     <Row gutter={[16, 16]}>
       {/* Left column: Baseline recommendation */}
       <Col xs={24} lg={12}>
-        <Card 
-          title={<span><MedicineBoxOutlined /> Baseline AI Recommendation</span>}
-          style={{ marginBottom: 16 }}
-        >
-          <div style={{ 
-            backgroundColor: '#f0f9ff', 
-            border: '1px solid #bae6fd', 
-            borderRadius: 6, 
-            padding: 12, 
-            marginBottom: 16,
-            height: 120  
-          }}>
-            <p style={{ margin: 0, fontSize: '14px', color: '#0369a1' }}>
-              <strong>Baseline Model:</strong> Standard large language model (GPT-5) providing therapy recommendations 
-              based solely on clinical case information without access to external knowledge sources or clinical trial databases.
-            </p>
-          </div>
-        </Card>
         <SingleRecommendation 
-          title=""
+          title={<span><MedicineBoxOutlined /> Baseline AI Recommendation</span>}
+          description={
+            <div style={{ 
+              backgroundColor: '#f0f9ff', 
+              border: '1px solid #bae6fd', 
+              borderRadius: 6, 
+              padding: 12,
+              height: 120
+            }}>
+              <p style={{ margin: 0, fontSize: '14px', color: '#0369a1' }}>
+                <strong>Baseline Model:</strong> Standard large language model (GPT-5) providing therapy recommendations 
+                based solely on clinical case information without access to external knowledge sources or clinical trial databases.
+              </p>
+            </div>
+          }
           recommendation={baselineRecommendationObj}
           nctUrlMap={{}} // No NCT links for baseline
           showPublications={false}
@@ -179,27 +182,23 @@ const TherapyRecommendation = ({ recommendation, baselineRecommendation, trialDa
       
       {/* Right column: Current agentic recommendation */}
       <Col xs={24} lg={12}>
-        <Card 
-          title={<span><MedicineBoxOutlined /> Agentic AI Recommendation</span>}
-          style={{ marginBottom: 16 }}
-        >
-          <div style={{ 
-            backgroundColor: '#f0f9ff', 
-            border: '1px solid #bae6fd', 
-            borderRadius: 6, 
-            padding: 12, 
-            marginBottom: 16,
-            height: 120 
-          }}>
-            <p style={{ margin: 0, fontSize: '14px', color: '#0369a1' }}>
-              <strong>Enhanced Agentic System:</strong> Multi-agent AI workflow that analyzes clinical guidelines, 
-              searches clinical trial databases, retrieves relevant publications, and provides evidence-based 
-              recommendations with direct links to trials and supporting literature.
-            </p>
-          </div>
-        </Card>
         <SingleRecommendation 
-          title=""
+          title={<span><MedicineBoxOutlined /> Agentic AI Recommendation</span>}
+          description={
+            <div style={{ 
+              backgroundColor: '#f0fdf4', 
+              border: '1px solid #bbf7d0', 
+              borderRadius: 6, 
+              padding: 12,
+              height: 120
+            }}>
+              <p style={{ margin: 0, fontSize: '14px', color: '#15803d' }}>
+                <strong>Enhanced Agentic System:</strong> Multi-agent AI workflow that analyzes clinical guidelines, 
+                searches clinical trial databases, retrieves relevant publications, and provides evidence-based 
+                recommendations with direct links to trials and supporting literature.
+              </p>
+            </div>
+          }
           recommendation={recommendation}
           nctUrlMap={nctUrlMap}
           showPublications={true}
