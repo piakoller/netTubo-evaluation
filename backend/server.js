@@ -126,9 +126,9 @@ async function loadBaselineFromMongo(patientId) {
     const collectionName = `patient-${patientId}`;
     const collection = mongoBaselineDb.collection(collectionName);
     
-    // Find document with Gemini 2.5 Pro model
+    // Find document with ChatGPT model
     const doc = await collection.findOne({
-      "metadata.model": "google/gemini-2.5-pro"
+      "metadata.model": "openai/gpt-5"
     });
     
     if (!doc || !doc.output || !doc.output.response) {

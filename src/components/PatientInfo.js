@@ -3,7 +3,7 @@ import { Card, Typography, Divider, Button, Space, Tooltip } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
 import { CopyOutlined, ArrowsAltOutlined, ShrinkOutlined } from '@ant-design/icons';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Paragraph } = Typography;
 
 // This component strictly shows fields available from the workflow JSON:
 // - patient.id
@@ -69,7 +69,7 @@ const PatientInfo = ({ patient, showExpertRecommendation = false }) => {
         <div style={{
           whiteSpace: 'pre-wrap',
           marginBottom: 0,
-          maxHeight: expandClinical ? 'none' : 220,
+          maxHeight: expandClinical ? 'none' : 450,
           overflow: 'hidden',
           lineHeight: 1.6
         }}>

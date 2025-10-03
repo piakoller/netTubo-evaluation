@@ -150,8 +150,26 @@ const TherapyRecommendation = ({ recommendation, baselineRecommendation, trialDa
     <Row gutter={[16, 16]}>
       {/* Left column: Baseline recommendation */}
       <Col xs={24} lg={12}>
+        <Card 
+          title={<span><MedicineBoxOutlined /> Baseline AI Recommendation</span>}
+          style={{ marginBottom: 16 }}
+        >
+          <div style={{ 
+            backgroundColor: '#f0f9ff', 
+            border: '1px solid #bae6fd', 
+            borderRadius: 6, 
+            padding: 12, 
+            marginBottom: 16,
+            height: 120  
+          }}>
+            <p style={{ margin: 0, fontSize: '14px', color: '#0369a1' }}>
+              <strong>Baseline Model:</strong> Standard large language model (GPT-5) providing therapy recommendations 
+              based solely on clinical case information without access to external knowledge sources or clinical trial databases.
+            </p>
+          </div>
+        </Card>
         <SingleRecommendation 
-          title={<span><MedicineBoxOutlined /> Baseline AI Recommendation (Gemini 2.5 Pro)</span>}
+          title=""
           recommendation={baselineRecommendationObj}
           nctUrlMap={{}} // No NCT links for baseline
           showPublications={false}
@@ -161,8 +179,27 @@ const TherapyRecommendation = ({ recommendation, baselineRecommendation, trialDa
       
       {/* Right column: Current agentic recommendation */}
       <Col xs={24} lg={12}>
-        <SingleRecommendation 
+        <Card 
           title={<span><MedicineBoxOutlined /> Agentic AI Recommendation</span>}
+          style={{ marginBottom: 16 }}
+        >
+          <div style={{ 
+            backgroundColor: '#f0f9ff', 
+            border: '1px solid #bae6fd', 
+            borderRadius: 6, 
+            padding: 12, 
+            marginBottom: 16,
+            height: 120 
+          }}>
+            <p style={{ margin: 0, fontSize: '14px', color: '#0369a1' }}>
+              <strong>Enhanced Agentic System:</strong> Multi-agent AI workflow that analyzes clinical guidelines, 
+              searches clinical trial databases, retrieves relevant publications, and provides evidence-based 
+              recommendations with direct links to trials and supporting literature.
+            </p>
+          </div>
+        </Card>
+        <SingleRecommendation 
+          title=""
           recommendation={recommendation}
           nctUrlMap={nctUrlMap}
           showPublications={true}
