@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
-import { Card, Button, Space, Tooltip } from 'antd';
-import { MedicineBoxOutlined, CopyOutlined, ArrowsAltOutlined, ShrinkOutlined } from '@ant-design/icons';
+import React from 'react';
+import { Card, Button, Space, Tooltip, Row, Col } from 'antd';
+import { MedicineBoxOutlined, CopyOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -34,44 +34,8 @@ const PublicationsCard = ({ mentionedNCTs = [], nctPublicationMap = {} }) => {
   );
 };
 
-const TherapyRecommendation = ({ recommendation, trialData = [] }) => {
-  if (!recommendation) return null;
-
-  const { raw_response } = recommendation;
-
-  const nctUrlMap = {};
-  trialData.forEach(trial => {
-    if (trial.nct_id && trial.url) nctUrlMap[trial.nct_id] = trial.url;
-  });
-
-// Map NCT IDs to array of publication objects { title, url, source }
-const nctPublicationMap = {};
-trialData.forEach(trial => {
-  const nctId = trial.nct_id;
-  const online = trial.publication_analysis?.online_search_results || {};
-  const sources = [
-    { key: 'pubmed', arr: online.pubmed?.publications, label: 'PubMed' },
-    { key: 'onclive', arr: online.onclive?.articles, label: 'OncLive' },
-    // { key: 'google_scholar', arr: online.google_scholar?.articles, label: 'Google Scholar' },
-    { key: 'congress_abstracts', arr: online.congress_abstracts?.abstracts, label: 'Congress Abstracts' }
-  ];
-  let allPubs = [];
-  sources.forEach(src => {
-    if (Array.isArray(src.arr) && src.arr.length > 0) {
-      allPubs = allPubs.concat(
-        src.arr.map(pub => ({
-          title: pub.title || pub.abstract_text || 'Publication',
-          url: pub.url || pub.link || '',
-          source: src.label
-        }))
-      );
-    }
-  });
-  if (nctId && allPubs.length > 0) {
-    nctPublicationMap[nctId] = allPubs;
-  }
-});
-
+// Single Recommendation Component
+const SingleRecommendation = ({ title, recommendation, nctUrlMap = {}, showPublications = false, trialData = [] }) => {
   const copyText = async (text) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -79,6 +43,16 @@ trialData.forEach(trial => {
       console.warn('Copy failed');
     }
   };
+
+  if (!recommendation) {
+    return (
+      <Card title={title} style={{ marginBottom: 16 }}>
+        <p>No recommendation available</p>
+      </Card>
+    );
+  }
+
+  const { raw_response } = recommendation;
 
   const sanitizedRaw = (raw_response || '')
     .replace(/<\/?(therapy_recommendation|rationale)>/gi, '')
@@ -92,21 +66,50 @@ trialData.forEach(trial => {
     const processed = parts.map(p => nctUrlMap[p] ? `[${p}](${nctUrlMap[p]})` : p).join('');
     // Custom link renderer to open in new tab
     const components = {
-      a: ({node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" />
+      a: ({node, children, ...props}) => (
+        <a {...props} target="_blank" rel="noopener noreferrer">
+          {children}
+        </a>
+      )
     };
     return <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{processed}</ReactMarkdown>;
   };
 
+  // Map NCT IDs to array of publication objects for the publications card
+  const nctPublicationMap = {};
+  if (showPublications) {
+    trialData.forEach(trial => {
+      const nctId = trial.nct_id;
+      const online = trial.publication_analysis?.online_search_results || {};
+      const sources = [
+        { key: 'pubmed', arr: online.pubmed?.publications, label: 'PubMed' },
+        { key: 'onclive', arr: online.onclive?.articles, label: 'OncLive' },
+        { key: 'congress_abstracts', arr: online.congress_abstracts?.abstracts, label: 'Congress Abstracts' }
+      ];
+      let allPubs = [];
+      sources.forEach(src => {
+        if (Array.isArray(src.arr) && src.arr.length > 0) {
+          allPubs = allPubs.concat(
+            src.arr.map(pub => ({
+              title: pub.title || pub.abstract_text || 'Publication',
+              url: pub.url || pub.link || '',
+              source: src.label
+            }))
+          );
+        }
+      });
+      if (nctId && allPubs.length > 0) {
+        nctPublicationMap[nctId] = allPubs;
+      }
+    });
+  }
 
   // Find all NCT numbers mentioned in the markdown
   const mentionedNCTs = Array.from(new Set((sanitizedRaw.match(/NCT\d{8}/g) || [])));
 
   return (
     <>
-      <Card
-        title={<span><MedicineBoxOutlined /> AI Therapy Recommendation</span>}
-        style={{ marginBottom: 16 }}
-      >
+      <Card title={title} style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
           <Space size="small">
             <Tooltip title="Copy response">
@@ -124,9 +127,50 @@ trialData.forEach(trial => {
           {sanitizedRaw ? <MarkdownWithNCTLinks content={sanitizedRaw} /> : <p>No recommendation available</p>}
         </div>
       </Card>
-      <PublicationsCard mentionedNCTs={mentionedNCTs} nctPublicationMap={nctPublicationMap} />
+      {showPublications && <PublicationsCard mentionedNCTs={mentionedNCTs} nctPublicationMap={nctPublicationMap} />}
     </>
   );
-}
+};
+
+const TherapyRecommendation = ({ recommendation, baselineRecommendation, trialData = [] }) => {
+  // Create NCT URL mapping from trial data
+  const nctUrlMap = {};
+  trialData.forEach(trial => {
+    if (trial.nct_id && trial.url) nctUrlMap[trial.nct_id] = trial.url;
+  });
+
+  // Convert baseline recommendation string to the expected object format
+  const baselineRecommendationObj = baselineRecommendation 
+    ? (typeof baselineRecommendation === 'string' 
+        ? { raw_response: baselineRecommendation } 
+        : baselineRecommendation)
+    : null;
+
+  return (
+    <Row gutter={[16, 16]}>
+      {/* Left column: Baseline recommendation */}
+      <Col xs={24} lg={12}>
+        <SingleRecommendation 
+          title={<span><MedicineBoxOutlined /> Baseline AI Recommendation (Gemini 2.5 Pro)</span>}
+          recommendation={baselineRecommendationObj}
+          nctUrlMap={{}} // No NCT links for baseline
+          showPublications={false}
+          trialData={[]}
+        />
+      </Col>
+      
+      {/* Right column: Current agentic recommendation */}
+      <Col xs={24} lg={12}>
+        <SingleRecommendation 
+          title={<span><MedicineBoxOutlined /> Agentic AI Recommendation</span>}
+          recommendation={recommendation}
+          nctUrlMap={nctUrlMap}
+          showPublications={true}
+          trialData={trialData}
+        />
+      </Col>
+    </Row>
+  );
+};
 
 export default TherapyRecommendation;

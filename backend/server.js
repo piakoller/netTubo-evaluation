@@ -76,6 +76,12 @@ let mongoWorkflowConnection = null;
 const MONGODB_WORKFLOW_URI = process.env.MONGODB_WORKFLOW_URI || process.env.MONGODB_URI;
 const WORKFLOW_DB_NAME = 'nettubo-data';
 
+// MongoDB connection for baseline therapy recommendations
+let mongoBaselineDb = null;
+let mongoBaselineConnection = null;
+const MONGODB_BASELINE_URI = process.env.MONGODB_BASELINE_URI;
+const BASELINE_DB_NAME = 'nettubo-baseline';
+
 async function connectToWorkflowDb() {
   if (!MONGODB_WORKFLOW_URI) {
     console.log('🔄 No MongoDB URI configured, using file-only workflow loading');
@@ -89,6 +95,56 @@ async function connectToWorkflowDb() {
     return mongoWorkflowDb;
   } catch (error) {
     console.error('❌ Failed to connect to MongoDB workflow database:', error.message);
+    return null;
+  }
+}
+
+async function connectToBaselineDb() {
+  if (!MONGODB_BASELINE_URI) {
+    console.log('🔄 No MongoDB baseline URI configured, baseline recommendations will not be available');
+    return null;
+  }
+  
+  try {
+    mongoBaselineConnection = await mongoose.createConnection(MONGODB_BASELINE_URI);
+    mongoBaselineDb = mongoBaselineConnection.useDb(BASELINE_DB_NAME);
+    console.log('🚀 Connected to MongoDB baseline database:', BASELINE_DB_NAME);
+    return mongoBaselineDb;
+  } catch (error) {
+    console.error('❌ Failed to connect to MongoDB baseline database:', error.message);
+    return null;
+  }
+}
+
+async function loadBaselineFromMongo(patientId) {
+  if (!mongoBaselineDb) {
+    console.log('⚠️ Baseline database not connected');
+    return null;
+  }
+
+  try {
+    const collectionName = `patient-${patientId}`;
+    const collection = mongoBaselineDb.collection(collectionName);
+    
+    // Find document with Gemini 2.5 Pro model
+    const doc = await collection.findOne({
+      "metadata.model": "google/gemini-2.5-pro"
+    });
+    
+    if (!doc || !doc.output || !doc.output.response) {
+      console.log(`⚠️ No baseline recommendation found for patient ${patientId}`);
+      return null;
+    }
+    
+    // Clean XML tags and format the response
+    let baselineResponse = doc.output.response;
+    baselineResponse = baselineResponse.replace(/<[^>]*>/g, ''); // Remove XML tags
+    baselineResponse = baselineResponse.trim(); // Remove extra whitespace
+    
+    console.log(`✅ Loaded baseline recommendation for patient ${patientId}`);
+    return baselineResponse;
+  } catch (error) {
+    console.error(`❌ Error loading baseline for patient ${patientId}:`, error.message);
     return null;
   }
 }
@@ -337,6 +393,8 @@ async function loadAllPatientData() {
 // Helper function to process workflow data into patient data structure
 async function processWorkflowIntoPatientData(patientId, workflow) {
   try {
+    console.log(`🔍 Processing workflow for patient ${patientId}, workflow exists: ${!!workflow}`);
+    
     let clinicalInfo = undefined;
     let clinicalQuestion = undefined;
     let expertRecommendation = undefined;
@@ -348,12 +406,14 @@ async function processWorkflowIntoPatientData(patientId, workflow) {
       clinicalQuestion = pd.question_for_tumorboard || pd['question_for_tumorboard'] || pd.ClinicalQuestion || pd['Clinical Question'];
       expertRecommendation = pd.expert_recommendation || pd['expert_recommendation'];
       originalPatientData = pd;
+      console.log(`📋 Found patient data in guidelines_result for patient ${patientId}`);
     }
 
     // Load recommendation raw text from workflow
     let recommendation = null;
     let trialData = null;
     if (workflow && workflow.recommendation_result) {
+      console.log(`🎯 Found recommendation_result for patient ${patientId}`);
       const rr = workflow.recommendation_result;
       const candidate = rr.markdown || rr.md || rr.raw_response || rr["raw_response"] || rr.text || '';
       const normalized = normalizeMarkdownText(candidate);
@@ -361,15 +421,21 @@ async function processWorkflowIntoPatientData(patientId, workflow) {
         raw_response: normalized || 'No recommendation available',
         source: 'complete_workflow'
       };
+      console.log(`📝 Recommendation loaded for patient ${patientId}, length: ${normalized?.length || 0}`);
       
       // Extract trial matching data for NCT linking
       if (workflow.trial_matching_result && workflow.trial_matching_result.relevant_trials) {
         trialData = workflow.trial_matching_result.relevant_trials;
+        console.log(`🧪 Found ${trialData.length} trials for patient ${patientId}`);
       }
     } else {
+      console.log(`⚠️ No recommendation_result found for patient ${patientId}, trying legacy files`);
       // Fallback to legacy files
       recommendation = await loadLegacyRecommendation(patientId);
     }
+
+    // Load baseline recommendation from MongoDB
+    const baselineRecommendation = await loadBaselineFromMongo(patientId);
 
     return {
       id: patientId.toString(),
@@ -379,6 +445,7 @@ async function processWorkflowIntoPatientData(patientId, workflow) {
       expert_recommendation: expertRecommendation,
       original_patient_data: originalPatientData,
       recommendation,
+      baseline_recommendation: baselineRecommendation,
       trial_data: trialData  // Add trial data for NCT linking
     };
   } catch (error) {
@@ -494,13 +561,17 @@ async function startServer() {
     // Connect to MongoDB workflow database (for patient data)
     await connectToWorkflowDb();
     
+    // Connect to MongoDB baseline database (for baseline recommendations)
+    await connectToBaselineDb();
+    
     // Start server
     app.listen(PORT, () => {
       console.log(`🚀 NetTubo Evaluation Backend running on port ${PORT}`);
       console.log(`📊 MongoDB (evaluations): ${dbConnection.isConnected ? '✅ Connected' : '❌ Disconnected'}`);
       console.log(`📊 MongoDB (workflows): ${mongoWorkflowDb ? '✅ Connected' : '❌ Disconnected'}`);
-      console.log(`� Batch results path: ${BATCH_RESULTS_PATH}`);
-      console.log(`� Patient data: MongoDB collections only (patient-1, patient-2, patient-3)`);
+      console.log(`📊 MongoDB (baseline): ${mongoBaselineDb ? '✅ Connected' : '❌ Disconnected'}`);
+      console.log(`📁 Batch results path: ${BATCH_RESULTS_PATH}`);
+      console.log(`📊 Patient data: MongoDB collections only (patient-1, patient-2, patient-3)`);
       
       // Check if batch results path exists
       fs.pathExists(BATCH_RESULTS_PATH).then(exists => {

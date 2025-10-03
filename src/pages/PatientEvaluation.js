@@ -227,7 +227,7 @@ const PatientEvaluation = ({ userData }) => {
       <Card>
         <Title level={2}>
           <MedicineBoxOutlined style={{ marginRight: '8px' }} />
-          Patient Case Evaluation
+          Recommendation
         </Title>
         
         {completedCount === totalPatients ? (
@@ -277,6 +277,7 @@ const PatientEvaluation = ({ userData }) => {
             <Col xs={24} lg={24}>
               <TherapyRecommendation 
                 recommendation={selectedPatient.recommendation} 
+                baselineRecommendation={selectedPatient.baseline_recommendation}
                 patientId={selectedPatientId}
                 trialData={selectedPatient.trial_data}
               />
