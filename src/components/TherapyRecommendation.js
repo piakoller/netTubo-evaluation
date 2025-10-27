@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { Card, Button, Space, Tooltip, Row, Col } from 'antd';
+import { Card, Button, Space, Tooltip } from 'antd';
 import { MedicineBoxOutlined, CopyOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -35,7 +34,7 @@ const PublicationsCard = ({ mentionedNCTs = [], nctPublicationMap = {} }) => {
 };
 
 // Single Recommendation Component
-const SingleRecommendation = ({ title, description, recommendation, nctUrlMap = {}, showPublications = false, trialData = [] }) => {
+const SingleRecommendation = ({ title, recommendation, nctUrlMap = {}, showPublications = false, trialData = [] }) => {
   const copyText = async (text) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -47,7 +46,6 @@ const SingleRecommendation = ({ title, description, recommendation, nctUrlMap = 
   if (!recommendation) {
     return (
       <Card title={title} style={{ marginBottom: 16 }}>
-        {description && description}
         <p>No recommendation available</p>
       </Card>
     );
@@ -111,12 +109,6 @@ const SingleRecommendation = ({ title, description, recommendation, nctUrlMap = 
   return (
     <>
       <Card title={title} style={{ marginBottom: 16 }}>
-        {description && (
-          <div style={{ marginBottom: 16 }}>
-            {description}
-          </div>
-        )}
-        
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
           <Space size="small">
             <Tooltip title="Copy response">
@@ -139,73 +131,31 @@ const SingleRecommendation = ({ title, description, recommendation, nctUrlMap = 
   );
 };
 
-const TherapyRecommendation = ({ recommendation, baselineRecommendation, trialData = [] }) => {
+const TherapyRecommendation = ({ recommendation, trialData = [], recommendationType }) => {
   // Create NCT URL mapping from trial data
   const nctUrlMap = {};
   trialData.forEach(trial => {
     if (trial.nct_id && trial.url) nctUrlMap[trial.nct_id] = trial.url;
   });
 
-  // Convert baseline recommendation string to the expected object format
-  const baselineRecommendationObj = baselineRecommendation 
-    ? (typeof baselineRecommendation === 'string' 
-        ? { raw_response: baselineRecommendation } 
-        : baselineRecommendation)
+  // The recommendation object is now passed directly
+  const recommendationObj = recommendation 
+    ? (typeof recommendation === 'string' 
+        ? { raw_response: recommendation } 
+        : recommendation)
     : null;
+  
+  // Only show publications and NCT links for the agentic recommendation
+  const isAgentic = recommendationType === 'agentic';
 
   return (
-    <Row gutter={[16, 16]}>
-      {/* Left column: Baseline recommendation */}
-      <Col xs={24} lg={12}>
-        <SingleRecommendation 
-          title={<span><MedicineBoxOutlined /> Baseline AI Recommendation</span>}
-          description={
-            <div style={{ 
-              backgroundColor: '#f0f9ff', 
-              border: '1px solid #bae6fd', 
-              borderRadius: 6, 
-              padding: 12,
-              height: 120
-            }}>
-              <p style={{ margin: 0, fontSize: '14px', color: '#0369a1' }}>
-                <strong>Baseline Model:</strong> Standard large language model (GPT-5) providing therapy recommendations 
-                based solely on clinical case information without access to external knowledge sources or clinical trial databases.
-              </p>
-            </div>
-          }
-          recommendation={baselineRecommendationObj}
-          nctUrlMap={{}} // No NCT links for baseline
-          showPublications={false}
-          trialData={[]}
-        />
-      </Col>
-      
-      {/* Right column: Current agentic recommendation */}
-      <Col xs={24} lg={12}>
-        <SingleRecommendation 
-          title={<span><MedicineBoxOutlined /> Agentic AI Recommendation</span>}
-          description={
-            <div style={{ 
-              backgroundColor: '#f0fdf4', 
-              border: '1px solid #bbf7d0', 
-              borderRadius: 6, 
-              padding: 12,
-              height: 120
-            }}>
-              <p style={{ margin: 0, fontSize: '14px', color: '#15803d' }}>
-                <strong>Enhanced Agentic System:</strong> Multi-agent AI workflow that analyzes clinical guidelines, 
-                searches clinical trial databases, retrieves relevant publications, and provides evidence-based 
-                recommendations with direct links to trials and supporting literature.
-              </p>
-            </div>
-          }
-          recommendation={recommendation}
-          nctUrlMap={nctUrlMap}
-          showPublications={true}
-          trialData={trialData}
-        />
-      </Col>
-    </Row>
+    <SingleRecommendation 
+      title={<span><MedicineBoxOutlined /> AI-Generated Recommendation</span>}
+      recommendation={recommendationObj}
+      nctUrlMap={isAgentic ? nctUrlMap : {}}
+      showPublications={isAgentic}
+      trialData={isAgentic ? trialData : []}
+    />
   );
 };
 

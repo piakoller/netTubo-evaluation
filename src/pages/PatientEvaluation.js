@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Select, Typography, Row, Col, Button, message, Progress, Alert } from 'antd';
-import { UserOutlined, MedicineBoxOutlined, CheckCircleOutlined, ReloadOutlined } from '@ant-design/icons';
+import { Card, Typography, Row, Col, message, Progress, Button } from 'antd';
+import { MedicineBoxOutlined, CheckCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import PatientInfo from '../components/PatientInfo';
-import TherapyRecommendation from '../components/TherapyRecommendation';
 import EvaluationForm from '../components/EvaluationForm';
 import dataService from '../services/dataService';
+import TherapyRecommendation from '../components/TherapyRecommendation';
 
 const { Title, Text } = Typography;
-const { Option } = Select;
 
 const PatientEvaluation = ({ userData }) => {
   const [patients, setPatients] = useState({});
@@ -17,6 +16,41 @@ const PatientEvaluation = ({ userData }) => {
   const [submitting, setSubmitting] = useState(false);
   const [completedEvaluations, setCompletedEvaluations] = useState(new Set());
   const [studyCompleted, setStudyCompleted] = useState(false);
+  const [shuffledRecommendations, setShuffledRecommendations] = useState({});
+
+  // Helper: Shuffle recommendations for a patient and store the order
+  const getShuffledRecommendation = useCallback((patient) => {
+    if (!patient) return null;
+
+    // Check if we have already shuffled for this patient
+    if (shuffledRecommendations[patient.patient_id]) {
+      return shuffledRecommendations[patient.patient_id];
+    }
+
+    const recommendations = [
+      { type: 'agentic', data: patient.recommendation },
+      { type: 'baseline', data: patient.baseline_recommendation }
+    ].filter(rec => rec.data); // Filter out any null/undefined recommendations
+
+    // Shuffle the array
+    const shuffled = recommendations.sort(() => 0.5 - Math.random());
+    
+    // Store the shuffled order
+    const newShuffled = { ...shuffledRecommendations, [patient.patient_id]: shuffled[0] };
+    setShuffledRecommendations(newShuffled);
+
+    return shuffled[0];
+  }, [shuffledRecommendations]);
+
+  // When a new patient is selected, get a shuffled recommendation
+  useEffect(() => {
+    if (selectedPatient) {
+      getShuffledRecommendation(selectedPatient);
+    }
+  }, [selectedPatient, getShuffledRecommendation]);
+
+  const currentRecommendation = selectedPatient ? getShuffledRecommendation(selectedPatient) : null;
+
 
   // Helper: normalize and sort patient IDs numerically when possible
   const getSortedIds = (obj) => {
@@ -151,6 +185,7 @@ const PatientEvaluation = ({ userData }) => {
       const evaluation = {
         patient_id: selectedPatientId,
         user_data: userData,
+        recommendation_type: currentRecommendation?.type, // Store whether 'agentic' or 'baseline' was shown
         timestamp: new Date().toISOString(),
         evaluationStartTime: new Date().toISOString(), // You might want to track actual start time
         ...evaluationData
@@ -237,7 +272,7 @@ const PatientEvaluation = ({ userData }) => {
     }
   };
 
-  const handleRestartStudy = () => {
+  const handleRestartStudy = useCallback(() => {
     // Clear all completed evaluations
     setCompletedEvaluations(new Set());
     setStudyCompleted(false);
@@ -253,7 +288,7 @@ const PatientEvaluation = ({ userData }) => {
       handlePatientSelect(firstPatientId);
       message.info('Study restarted. Starting with Patient 1...');
     }
-  };
+  }, [handlePatientSelect, patients, pickNextPatientId, userData?.userId]);
 
   if (loading) {
     return (
@@ -267,10 +302,25 @@ const PatientEvaluation = ({ userData }) => {
   const completedCount = completedEvaluations.size;
   const progressPercent = totalPatients > 0 ? (completedCount / totalPatients) * 100 : 0;
 
-  
+  if (studyCompleted) {
+    return (
+      <div style={{ maxWidth: '800px', margin: '40px auto', textAlign: 'center' }}>
+        <Card>
+          <CheckCircleOutlined style={{ fontSize: '48px', color: '#52c41a', marginBottom: '24px' }} />
+          <Title level={2}>Study Completed</Title>
+          <Text style={{ fontSize: '16px', display: 'block', marginBottom: '32px' }}>
+            Thank you for completing all the evaluations. Your participation is greatly appreciated!
+          </Text>
+          <Button type="primary" icon={<ReloadOutlined />} onClick={handleRestartStudy}>
+            Restart Study
+          </Button>
+        </Card>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '1600px', margin: '0 auto' }}>
       {/* User Info Header */}
       <Card style={{ marginBottom: '16px' }}>
         <Row justify="space-between" align="middle">
@@ -293,122 +343,56 @@ const PatientEvaluation = ({ userData }) => {
         </Row>
       </Card>
 
-      <Card>
-        <Title level={2}>
-          <MedicineBoxOutlined style={{ marginRight: '8px' }} />
-          Recommendation
-        </Title>
-        
-        {completedCount === totalPatients ? (
-          <Alert
-            message="Study Completed!"
-            description="Thank you for completing all patient evaluations. Your responses have been recorded for research purposes."
-            type="success"
-            showIcon
-            icon={<CheckCircleOutlined />}
-            style={{ marginTop: '24px' }}
-          />
-        ) : (
-          <div style={{ marginBottom: '24px' }}>
-            <Title level={4}>Select Patient Case:</Title>
-            <Select
-              style={{ width: '400px' }}
-              placeholder="Choose a patient case to evaluate"
-              value={selectedPatientId}
-              onChange={handlePatientSelect}
-            >
-              {Object.keys(patients).map(patientId => {
-                const isCompleted = completedEvaluations.has(patientId);
-                const label = `Patient ${patientId}`;
-                return (
-                  <Option key={patientId} value={patientId} disabled={isCompleted}>
-                    {label} {isCompleted && ' ✓ Completed'}
-                  </Option>
-                );
-              })}
-            </Select>
-          </div>
-        )}
-      </Card>
-
+      {/* Patient Information */}
       {selectedPatient && (
-        <>
-          <Row gutter={[24, 24]} style={{ marginTop: '24px' }}>
-            <Col xs={24} lg={24}>
-              <PatientInfo 
-                patient={selectedPatient}
-                showExpertRecommendation={completedEvaluations.has(selectedPatientId)}
-              />
-            </Col>
-            <Col xs={24} lg={24}>
-              <TherapyRecommendation 
-                recommendation={selectedPatient.recommendation} 
-                baselineRecommendation={selectedPatient.baseline_recommendation}
-                patientId={selectedPatientId}
-                trialData={selectedPatient.trial_data}
-              />
-            </Col>
-          </Row>
-
-          <Card style={{ marginTop: '24px' }}>
-            <Title level={3}>Evaluation Form</Title>
-            <EvaluationForm 
-              onSubmit={handleEvaluationSubmit}
-              onExpertSubmit={handleExpertEvaluationSubmit}
-              loading={submitting}
-              expertRecommendation={selectedPatient.expert_recommendation}
-            />
-          </Card>
-        </>
-      )}
-
-      {!selectedPatient && Object.keys(patients).length > 0 && !studyCompleted && (
-        <Card style={{ marginTop: '24px', textAlign: 'center', padding: '48px' }}>
-          <UserOutlined style={{ fontSize: '48px', color: '#ccc', marginBottom: '16px' }} />
-          <Title level={3} style={{ color: '#ccc' }}>
-            Select a patient to begin evaluation
-          </Title>
+        <Card style={{ marginBottom: 16 }}>
+          <PatientInfo patient={selectedPatient} />
         </Card>
       )}
 
-      {!selectedPatient && studyCompleted && (
-        <Card style={{ 
-          marginTop: '24px', 
-          textAlign: 'center', 
-          padding: '48px',
-          border: '2px solid #52c41a',
-          backgroundColor: '#f6ffed'
-        }}>
-          <CheckCircleOutlined style={{ 
-            fontSize: '64px', 
-            color: '#52c41a', 
-            marginBottom: '24px' 
-          }} />
-          <Title level={2} style={{ color: '#52c41a', marginBottom: '16px' }}>
-            🎉 Study Completed!
-          </Title>
-          <Typography.Paragraph style={{ 
-            fontSize: '16px', 
-            color: '#389e0d', 
-            marginBottom: '32px',
-            maxWidth: '600px',
-            margin: '0 auto 32px auto'
-          }}>
-            Thank you for your participation in the NetTubo evaluation study! 
-            Your evaluations have been successfully submitted and will contribute to 
-            advancing AI-assisted clinical decision making in oncology.
-          </Typography.Paragraph>
-          <Button 
-            type="primary" 
-            size="large"
-            icon={<ReloadOutlined />}
-            onClick={handleRestartStudy}
-            style={{ minWidth: '200px' }}
-          >
-            Restart Study
-          </Button>
-        </Card>
-      )}
+      <Card>
+        <Row gutter={[16, 16]}>
+          {/* Left column: Recommendation */}
+          <Col xs={24} lg={12}>
+            <Title level={2}>
+              <MedicineBoxOutlined style={{ marginRight: '8px' }} />
+              Recommendation
+            </Title>
+            {selectedPatient && currentRecommendation ? (
+              <TherapyRecommendation
+                recommendation={currentRecommendation.data}
+                trialData={selectedPatient.trial_data || []}
+                recommendationType={currentRecommendation.type}
+              />
+            ) : (
+              <Card>
+                <p>No recommendation to display.</p>
+              </Card>
+            )}
+          </Col>
+
+          {/* Right column: Evaluation */}
+          <Col xs={24} lg={12}>
+            <Title level={2}>
+              <CheckCircleOutlined style={{ marginRight: '8px' }} />
+              Evaluation
+            </Title>
+            {selectedPatient ? (
+              <EvaluationForm
+                key={selectedPatientId} // Force re-render on patient change
+                onSubmit={handleEvaluationSubmit}
+                onExpertSubmit={handleExpertEvaluationSubmit}
+                loading={submitting}
+                expertRecommendation={selectedPatient.expert_recommendation}
+              />
+            ) : (
+              <Card>
+                <p>Select a patient to begin evaluation.</p>
+              </Card>
+            )}
+          </Col>
+        </Row>
+      </Card>
     </div>
   );
 };

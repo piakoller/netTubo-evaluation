@@ -9,15 +9,13 @@ import {
   Card,
   Modal,
   Space,
-  Typography,
-  Collapse
+  Typography
 } from 'antd';
 
-import { MedicineBoxOutlined, FileTextOutlined } from '@ant-design/icons';
+import { MedicineBoxOutlined } from '@ant-design/icons';
 
 const { TextArea } = Input;
-const { Text, Title, Paragraph } = Typography;
-const { Panel } = Collapse;
+const { Text, Title } = Typography;
 
 const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendation }) => {
   const [form] = Form.useForm();
@@ -266,48 +264,39 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
         <Divider />
 
         {/* Detailed Evaluation Questions */}
-        <Collapse 
-          items={[
-            {
-              key: '1',
-              label: <Text strong>Detailed Evaluation Questions</Text>,
-              children: (
-                <div style={{ padding: '0 16px' }}>
-                  {evaluationCategories.map(category => (
-                    <div key={category.key} style={{ marginBottom: '24px' }}>
-                      <Title level={5} style={{ color: '#1890ff', marginBottom: '12px' }}>
-                        {category.title}
-                      </Title>
-                      <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
-                        {category.description}
-                      </Text>
-                      
-                      {category.questions.map(question => (
-                        <Form.Item
-                          key={question.key}
-                          name={question.key}
-                          label={question.label}
-                          help={question.description}
-                          rules={[{ required: true, message: `Please answer ${question.label}` }]}
-                        >
-                          <Radio.Group>
-                            {yesNoOptions.map(option => (
-                              <Radio key={option.value} value={option.value}>
-                                {option.label}
-                              </Radio>
-                            ))}
-                          </Radio.Group>
-                        </Form.Item>
+        <div>
+          <Title level={4} style={{ marginBottom: '24px' }}>Detailed Evaluation Questions</Title>
+          <div style={{ padding: '0 16px' }}>
+            {evaluationCategories.map(category => (
+              <div key={category.key} style={{ marginBottom: '24px' }}>
+                <Title level={5} style={{ color: '#1890ff', marginBottom: '12px' }}>
+                  {category.title}
+                </Title>
+                <Text type="secondary" style={{ display: 'block', marginBottom: '16px' }}>
+                  {category.description}
+                </Text>
+                
+                {category.questions.map(question => (
+                  <Form.Item
+                    key={question.key}
+                    name={question.key}
+                    label={question.label}
+                    help={question.description}
+                    rules={[{ required: true, message: `Please answer ${question.label}` }]}
+                  >
+                    <Radio.Group>
+                      {yesNoOptions.map(option => (
+                        <Radio key={option.value} value={option.value}>
+                          {option.label}
+                        </Radio>
                       ))}
-                    </div>
-                  ))}
-                </div>
-              )
-            }
-          ]} 
-          defaultActiveKey={[]} 
-          style={{ marginBottom: '24px' }}
-        />
+                    </Radio.Group>
+                  </Form.Item>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
 
         <Divider />
 
