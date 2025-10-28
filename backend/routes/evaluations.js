@@ -1,100 +1,155 @@
 const express = require('express');
-const Evaluation = require('../models/Evaluation');
+const Evaluation = require('../models/Evaluation'); // Keep for backward compatibility
+const UserEvaluationSession = require('../models/UserEvaluationSession');
 const User = require('../models/User');
 const router = express.Router();
 
-// Submit a new evaluation
+// Submit a new evaluation (handles both main and expert evaluations)
 router.post('/', async (req, res) => {
   try {
     const {
       userId,
       patientId,
+      evaluation_type = 'main', // Default to main evaluation
+      userData,
+      evaluationStartTime,
+      // Main evaluation fields
+      recommendation_type,
       overallRating,
       implementationWillingness,
       comments,
-      userData,
-      evaluationStartTime
+      // Detailed questions
+      guideline_adherence,
+      clinical_trial_integration,
+      diagnostic_soundness,
+      clinical_appropriateness,
+      contraindication_awareness,
+      treatment_completeness,
+      rationale_clarity,
+      risk_benefit_transparency,
+      consideration_alternatives,
+      actionable_next_steps,
+      personalization,
+      quality_of_life,
+      // Expert evaluation fields
+      expert_agreement,
+      expert_comments
     } = req.body;
 
-    // Validate required fields
-    if (!userId || !patientId || !overallRating || !implementationWillingness) {
-      return res.status(400).json({
-        error: 'Missing required fields: userId, patientId, overallRating, implementationWillingness'
-      });
+    // --- Validation ---
+    if (!userId || !patientId) {
+      return res.status(400).json({ error: 'Missing required fields: userId, patientId' });
     }
 
-    // Validate rating range
-    if (overallRating < 1 || overallRating > 10) {
-      return res.status(400).json({
-        error: 'overallRating must be between 1 and 10'
-      });
-    }
-
-    // Validate implementation willingness
-    const validOptions = ['yes', 'maybe', 'no'];
-    if (!validOptions.includes(implementationWillingness)) {
-      return res.status(400).json({
-        error: 'implementationWillingness must be one of: yes, maybe, no'
-      });
-    }
-
-    // Check if user exists
     const user = await User.findOne({ userId });
     if (!user) {
-      return res.status(404).json({
-        error: 'User not found',
-        userId: userId
-      });
+      return res.status(404).json({ error: 'User not found', userId });
     }
 
-    // Generate unique evaluation ID
-    const evaluationId = `EVAL_${Date.now()}_${userId}_${patientId}`;
+    // --- Find or create user evaluation session ---
+    let session = await UserEvaluationSession.findOne({ userId });
+    
+    if (!session) {
+      // Create new session for this user (first evaluation)
+      session = new UserEvaluationSession({
+        userId,
+        userData: userData || {
+          userId: user.userId,
+          profession: user.profession,
+          yearsExperience: user.yearsExperience
+        },
+        sessionStart: new Date(),
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        sessionId: req.sessionID || null,
+        patientEvaluations: []
+      });
+      // Save the new session to the database
+      await session.save();
+      console.log(`📝 Created new evaluation session for user ${userId}`);
+    } else {
+      console.log(`📝 Found existing evaluation session for user ${userId} (currently has ${session.patientEvaluations.length} patient evaluations)`);
+    }
 
-    // Create new evaluation
-    const newEvaluation = new Evaluation({
-      evaluationId,
-      userId,
-      patientId,
-      overallRating: parseInt(overallRating),
-      implementationWillingness,
-      comments: comments || '',
-      userData: userData || {
-        userId: user.userId,
-        profession: user.profession,
-        yearsExperience: user.yearsExperience
-      },
-      evaluationStartTime: evaluationStartTime ? new Date(evaluationStartTime) : null,
-      evaluationEndTime: new Date(),
-      ipAddress: req.ip,
-      userAgent: req.get('User-Agent'),
-      sessionId: req.sessionID || null
-    });
+    // --- Handle based on evaluation type ---
+    const evaluationId = `EVAL_${evaluation_type === 'expert_recommendation' ? 'EXPERT_' : ''}${Date.now()}_${userId}_${patientId}`;
+    
+    let evaluationData;
 
-    const savedEvaluation = await newEvaluation.save();
+    if (evaluation_type === 'expert_recommendation') {
+      // This is an expert evaluation - package it for the nested structure
+      evaluationData = {
+        patientId,
+        evaluation_type,
+        expertData: {
+          evaluationId,
+          expert_agreement,
+          expert_comments: expert_comments || '',
+          evaluationStartTime: evaluationStartTime ? new Date(evaluationStartTime) : null,
+          evaluationEndTime: new Date()
+        }
+      };
+    } else {
+      // This is a main evaluation
+      evaluationData = {
+        patientId,
+        evaluationId,
+        evaluation_type: 'main',
+        recommendation_type,
+        overallRating,
+        implementationWillingness,
+        comments,
+        guideline_adherence,
+        clinical_trial_integration,
+        diagnostic_soundness,
+        clinical_appropriateness,
+        contraindication_awareness,
+        treatment_completeness,
+        rationale_clarity,
+        risk_benefit_transparency,
+        consideration_alternatives,
+        actionable_next_steps,
+        personalization,
+        quality_of_life,
+        evaluationStartTime: evaluationStartTime ? new Date(evaluationStartTime) : null,
+        evaluationEndTime: new Date(),
+        submittedAt: new Date()
+      };
+    }
 
-    // Update user's completed evaluations
-    if (!user.completedEvaluations.includes(patientId)) {
+    // --- Add or Update evaluation in session ---
+    try {
+      await session.addOrUpdatePatientEvaluation(evaluationData);
+      console.log(`✅ Evaluation processed: ${evaluationId} (type: ${evaluation_type}) by ${userId} for patient ${patientId}`);
+      console.log(`📊 User ${userId} now has ${session.patientEvaluations.length} total patient evaluations in their session`);
+      console.log(`🔑 Session document ID: ${session._id}`);
+    } catch (evalError) {
+      console.error('❌ Error in addOrUpdatePatientEvaluation:', evalError);
+      throw evalError;
+    }
+
+    // Update user's completed evaluations (only for main evals)
+    if (evaluation_type === 'main' && !user.completedEvaluations.includes(patientId)) {
       user.completedEvaluations.push(patientId);
       await user.save();
     }
 
-    console.log(`✅ New evaluation submitted: ${evaluationId} by ${userId} for patient ${patientId}`);
-
     res.status(201).json({
       message: 'Evaluation submitted successfully',
-      evaluation: {
-        evaluationId: savedEvaluation.evaluationId,
-        userId: savedEvaluation.userId,
-        patientId: savedEvaluation.patientId,
-        overallRating: savedEvaluation.overallRating,
-        implementationWillingness: savedEvaluation.implementationWillingness,
-        timeSpentSeconds: savedEvaluation.timeSpentSeconds,
-        createdAt: savedEvaluation.createdAt
-      }
+      evaluation: evaluationData,
+      sessionId: session._id,
+      totalEvaluationsInSession: session.patientEvaluations.length
     });
 
   } catch (error) {
     console.error('Error submitting evaluation:', error);
+    // Provide more detailed validation error messages if available
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        error: 'Validation failed',
+        details: error.message
+      });
+    }
     res.status(500).json({
       error: 'Failed to submit evaluation',
       details: error.message
@@ -102,302 +157,74 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Get evaluations for a specific user
+// Get all evaluation sessions (optional: add admin protection)
+router.get('/', async (req, res) => {
+  try {
+    const sessions = await UserEvaluationSession.find().sort({ createdAt: -1 });
+    res.json({
+      sessions,
+      totalSessions: sessions.length,
+      totalEvaluations: sessions.reduce((sum, s) => sum + s.patientEvaluations.length, 0)
+    });
+  } catch (error) {
+    console.error('Error fetching evaluation sessions:', error);
+    res.status(500).json({
+      error: 'Failed to fetch evaluation sessions',
+      details: error.message
+    });
+  }
+});
+
+// Get evaluation session for a specific user
 router.get('/user/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
+    const session = await UserEvaluationSession.findOne({ userId });
     
-    const evaluations = await Evaluation.find({ userId })
-      .sort({ createdAt: -1 })
-      .select('-userAgent -ipAddress'); // Exclude sensitive data
-
+    if (!session) {
+      return res.status(404).json({ error: 'No evaluation session found for this user' });
+    }
+    
     res.json({
-      evaluations,
-      totalEvaluations: evaluations.length
+      session,
+      evaluationCount: session.patientEvaluations.length
     });
-
   } catch (error) {
-    console.error('Error fetching user evaluations:', error);
+    console.error(`Error fetching evaluation session for user ${req.params.userId}:`, error);
     res.status(500).json({
-      error: 'Failed to fetch evaluations',
+      error: 'Failed to fetch user evaluation session',
       details: error.message
     });
   }
 });
 
-// Get evaluations for a specific patient with detailed organization
+// Get evaluations for a specific patient across all users
 router.get('/patient/:patientId', async (req, res) => {
   try {
     const { patientId } = req.params;
-    
-    const evaluations = await Evaluation.find({ patientId })
-      .sort({ createdAt: -1 })
-      .select('-userAgent -ipAddress'); // Exclude sensitive data
-
-    // Organize evaluations by profession and experience for easier analysis
-    const organizationByProfession = {};
-    const organizationByExperience = {};
-    const summary = {
-      totalEvaluations: evaluations.length,
-      averageRating: 0,
-      implementationDistribution: { yes: 0, maybe: 0, no: 0 },
-      professions: new Set(),
-      experienceRanges: new Set()
-    };
-
-    let totalRating = 0;
-    
-    evaluations.forEach(evaluation => {
-      const profession = evaluation.userData?.profession || 'Unknown';
-      const experience = evaluation.userData?.yearsExperience || 0;
-      
-      // Organize by profession
-      if (!organizationByProfession[profession]) {
-        organizationByProfession[profession] = [];
-      }
-      organizationByProfession[profession].push(evaluation);
-      
-      // Organize by experience ranges
-      const expRange = experience < 5 ? '0-4 years' : 
-                      experience < 10 ? '5-9 years' : 
-                      experience < 20 ? '10-19 years' : '20+ years';
-      
-      if (!organizationByExperience[expRange]) {
-        organizationByExperience[expRange] = [];
-      }
-      organizationByExperience[expRange].push(evaluation);
-      
-      // Update summary stats
-      totalRating += evaluation.overallRating;
-      summary.implementationDistribution[evaluation.implementationWillingness]++;
-      summary.professions.add(profession);
-      summary.experienceRanges.add(expRange);
+    const sessions = await UserEvaluationSession.find({
+      'patientEvaluations.patientId': patientId
     });
-
-    if (evaluations.length > 0) {
-      summary.averageRating = (totalRating / evaluations.length).toFixed(2);
-    }
-
-    // Convert Sets to Arrays for JSON response
-    summary.professions = Array.from(summary.professions);
-    summary.experienceRanges = Array.from(summary.experienceRanges);
-
+    
+    // Extract just the evaluations for this patient from all sessions
+    const evaluations = sessions.map(session => {
+      const patientEval = session.patientEvaluations.find(e => e.patientId === patientId);
+      return {
+        ...patientEval.toObject(),
+        userId: session.userId,
+        userData: session.userData
+      };
+    }).filter(e => e);
+    
     res.json({
       patientId,
-      summary,
-      organizationByProfession,
-      organizationByExperience,
-      allEvaluations: evaluations,
-      totalEvaluations: evaluations.length
-    });
-
-  } catch (error) {
-    console.error('Error fetching patient evaluations:', error);
-    res.status(500).json({
-      error: 'Failed to fetch evaluations',
-      details: error.message
-    });
-  }
-});
-
-// Get all patients with their evaluation summaries
-router.get('/patients/summary', async (req, res) => {
-  try {
-    const patientSummaries = await Evaluation.aggregate([
-      {
-        $group: {
-          _id: '$patientId',
-          totalEvaluations: { $sum: 1 },
-          averageRating: { $avg: '$overallRating' },
-          professions: { $addToSet: '$userData.profession' },
-          implementationYes: {
-            $sum: { $cond: [{ $eq: ['$implementationWillingness', 'yes'] }, 1, 0] }
-          },
-          implementationMaybe: {
-            $sum: { $cond: [{ $eq: ['$implementationWillingness', 'maybe'] }, 1, 0] }
-          },
-          implementationNo: {
-            $sum: { $cond: [{ $eq: ['$implementationWillingness', 'no'] }, 1, 0] }
-          },
-          lastEvaluation: { $max: '$createdAt' },
-          firstEvaluation: { $min: '$createdAt' }
-        }
-      },
-      {
-        $sort: { '_id': 1 } // Sort by patient ID
-      }
-    ]);
-
-    const totalUniquePatients = patientSummaries.length;
-    const totalEvaluationsAcrossAllPatients = patientSummaries.reduce((sum, p) => sum + p.totalEvaluations, 0);
-
-    res.json({
-      totalUniquePatients,
-      totalEvaluationsAcrossAllPatients,
-      patientSummaries: patientSummaries.map(p => ({
-        patientId: p._id,
-        totalEvaluations: p.totalEvaluations,
-        averageRating: Math.round(p.averageRating * 100) / 100,
-        professions: p.professions,
-        implementationDistribution: {
-          yes: p.implementationYes,
-          maybe: p.implementationMaybe,
-          no: p.implementationNo
-        },
-        evaluationPeriod: {
-          first: p.firstEvaluation,
-          last: p.lastEvaluation
-        }
-      }))
-    });
-
-  } catch (error) {
-    console.error('Error fetching patient summaries:', error);
-    res.status(500).json({
-      error: 'Failed to fetch patient summaries',
-      details: error.message
-    });
-  }
-});
-
-// Export data for a specific patient (research-friendly format)
-router.get('/patient/:patientId/export', async (req, res) => {
-  try {
-    const { patientId } = req.params;
-    const { format = 'json' } = req.query;
-    
-    const evaluations = await Evaluation.find({ patientId })
-      .sort({ createdAt: 1 }) // Sort chronologically for export
-      .select('-userAgent -ipAddress -__v'); // Clean up for export
-
-    if (evaluations.length === 0) {
-      return res.status(404).json({
-        error: 'No evaluations found for this patient',
-        patientId
-      });
-    }
-
-    // Create research-friendly export format
-    const exportData = {
-      patientId,
-      exportTimestamp: new Date().toISOString(),
-      totalEvaluations: evaluations.length,
-      evaluations: evaluations.map(evaluation => ({
-        evaluationId: evaluation.evaluationId,
-        evaluatorId: evaluation.userId,
-        profession: evaluation.userData?.profession,
-        yearsExperience: evaluation.userData?.yearsExperience,
-        overallRating: evaluation.overallRating,
-        implementationWillingness: evaluation.implementationWillingness,
-        comments: evaluation.comments,
-        timeSpentSeconds: evaluation.timeSpentSeconds,
-        evaluationDate: evaluation.createdAt,
-        evaluationStartTime: evaluation.evaluationStartTime,
-        evaluationEndTime: evaluation.evaluationEndTime
-      }))
-    };
-
-    // Set appropriate headers for download
-    res.setHeader('Content-Disposition', `attachment; filename="patient_${patientId}_evaluations.json"`);
-    res.setHeader('Content-Type', 'application/json');
-    
-    res.json(exportData);
-
-  } catch (error) {
-    console.error('Error exporting patient evaluations:', error);
-    res.status(500).json({
-      error: 'Failed to export evaluations',
-      details: error.message
-    });
-  }
-});
-
-// Get all evaluations (for research/admin purposes)
-router.get('/', async (req, res) => {
-  try {
-    const { limit = 100, skip = 0, patientId, userId } = req.query;
-    
-    const filter = {};
-    if (patientId) filter.patientId = patientId;
-    if (userId) filter.userId = userId;
-
-    const evaluations = await Evaluation.find(filter)
-      .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
-      .skip(parseInt(skip))
-      .select('-userAgent -ipAddress'); // Exclude sensitive data
-
-    const totalEvaluations = await Evaluation.countDocuments(filter);
-
-    res.json({
       evaluations,
-      totalEvaluations,
-      currentPage: Math.floor(skip / limit) + 1,
-      totalPages: Math.ceil(totalEvaluations / limit)
+      evaluationCount: evaluations.length
     });
-
   } catch (error) {
-    console.error('Error fetching evaluations:', error);
+    console.error(`Error fetching evaluations for patient ${req.params.patientId}:`, error);
     res.status(500).json({
-      error: 'Failed to fetch evaluations',
-      details: error.message
-    });
-  }
-});
-
-// Get evaluation statistics
-router.get('/stats/summary', async (req, res) => {
-  try {
-    const totalEvaluations = await Evaluation.countDocuments();
-    const uniqueUsers = await Evaluation.distinct('userId').then(users => users.length);
-    const uniquePatients = await Evaluation.distinct('patientId').then(patients => patients.length);
-
-    // Average ratings
-    const ratingStats = await Evaluation.aggregate([
-      {
-        $group: {
-          _id: null,
-          averageRating: { $avg: '$overallRating' },
-          minRating: { $min: '$overallRating' },
-          maxRating: { $max: '$overallRating' }
-        }
-      }
-    ]);
-
-    // Implementation willingness distribution
-    const implementationStats = await Evaluation.aggregate([
-      {
-        $group: {
-          _id: '$implementationWillingness',
-          count: { $sum: 1 }
-        }
-      }
-    ]);
-
-    // Profession distribution
-    const professionStats = await Evaluation.aggregate([
-      {
-        $group: {
-          _id: '$userData.profession',
-          count: { $sum: 1 },
-          averageRating: { $avg: '$overallRating' }
-        }
-      }
-    ]);
-
-    res.json({
-      totalEvaluations,
-      uniqueUsers,
-      uniquePatients,
-      ratingStatistics: ratingStats[0] || {},
-      implementationWillingness: implementationStats,
-      professionDistribution: professionStats
-    });
-
-  } catch (error) {
-    console.error('Error generating evaluation statistics:', error);
-    res.status(500).json({
-      error: 'Failed to generate statistics',
+      error: 'Failed to fetch patient evaluations',
       details: error.message
     });
   }

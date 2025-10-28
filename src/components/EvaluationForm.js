@@ -127,13 +127,6 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
     description: 'Rate the overall quality of this therapy recommendation (1 = very poor, 10 = excellent)'
   };
 
-  const similarityOptions = [
-    { value: 'baseline', label: 'More similar to the Baseline AI recommendation' },
-    { value: 'agentic', label: 'More similar to the Agentic AI recommendation' },
-    { value: 'neither', label: 'Different from both AI recommendations' },
-    { value: 'both', label: 'Similar to both AI recommendations' }
-  ];
-
   const agreementOptions = [
     { value: 'strongly_agree', label: 'Strongly agree' },
     { value: 'agree', label: 'Agree' },
@@ -180,10 +173,58 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
     }
   };
 
+  const handleSubmitFailed = (errorInfo) => {
+    // Build a detailed error message listing all missing fields
+    const missingFields = errorInfo.errorFields.map(field => {
+      const fieldName = field.name[0];
+      
+      // Find the human-readable label for this field
+      if (fieldName === 'implementation_willingness') {
+        return 'Implementation Willingness';
+      }
+      
+      // Search through all categories for the question
+      for (const category of evaluationCategories) {
+        const question = category.questions.find(q => q.key === fieldName);
+        if (question) {
+          return question.label;
+        }
+      }
+      
+      return fieldName;
+    });
+
+    const errorMessage = missingFields.length === 1
+      ? `Please answer the required question: ${missingFields[0]}`
+      : `Please answer the following required questions:\n• ${missingFields.join('\n• ')}`;
+
+    Modal.error({
+      title: 'Missing Required Fields',
+      content: (
+        <div>
+          <p>You must answer all required questions before submitting.</p>
+          <div style={{ marginTop: '12px', fontWeight: 'bold' }}>
+            Missing:
+          </div>
+          <ul style={{ marginTop: '8px', paddingLeft: '20px' }}>
+            {missingFields.map((field, index) => (
+              <li key={index}>{field}</li>
+            ))}
+          </ul>
+        </div>
+      ),
+      okText: 'OK',
+    });
+
+    // Scroll to the first error field
+    if (errorInfo.errorFields.length > 0) {
+      form.scrollToField(errorInfo.errorFields[0].name);
+    }
+  };
+
   const handleExpertEvaluationSubmit = async (values) => {
     try {
       const expertEvaluationData = {
-        expert_similarity: values.expert_similarity,
         expert_agreement: values.expert_agreement,
         expert_comments: values.expert_comments || ''
       };
@@ -219,9 +260,11 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
         form={form}
         layout="vertical"
         onFinish={handleSubmit}
+        onFinishFailed={handleSubmitFailed}
         initialValues={{
           overall_rating: 5
         }}
+        scrollToFirstError
       >
         {/* Name field removed to keep study anonymous */}
 
@@ -358,22 +401,6 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
           layout="vertical"
           onFinish={handleExpertEvaluationSubmit}
         >
-          <Form.Item
-            name="expert_similarity"
-            label="Which AI recommendation is this expert decision most similar to?"
-            rules={[{ required: true, message: 'Please select an option' }]}
-          >
-            <Radio.Group>
-              <Space direction="vertical">
-                {similarityOptions.map(option => (
-                  <Radio key={option.value} value={option.value}>
-                    {option.label}
-                  </Radio>
-                ))}
-              </Space>
-            </Radio.Group>
-          </Form.Item>
-
           <Form.Item
             name="expert_agreement"
             label="Do you agree with this expert tumor board decision?"

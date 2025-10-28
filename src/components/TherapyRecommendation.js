@@ -138,6 +138,13 @@ const TherapyRecommendation = ({ recommendation, trialData = [], recommendationT
     if (trial.nct_id && trial.url) nctUrlMap[trial.nct_id] = trial.url;
   });
 
+  console.log('TherapyRecommendation props:', {
+    recommendationType,
+    trialDataCount: trialData?.length || 0,
+    nctUrlMapKeys: Object.keys(nctUrlMap),
+    recommendationExists: !!recommendation
+  });
+
   // The recommendation object is now passed directly
   const recommendationObj = recommendation 
     ? (typeof recommendation === 'string' 
@@ -152,9 +159,9 @@ const TherapyRecommendation = ({ recommendation, trialData = [], recommendationT
     <SingleRecommendation 
       title={<span><MedicineBoxOutlined /> AI-Generated Recommendation</span>}
       recommendation={recommendationObj}
-      nctUrlMap={isAgentic ? nctUrlMap : {}}
+      nctUrlMap={nctUrlMap}
       showPublications={isAgentic}
-      trialData={isAgentic ? trialData : []}
+      trialData={trialData}
     />
   );
 };

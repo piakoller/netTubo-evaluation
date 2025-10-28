@@ -56,6 +56,32 @@ router.post('/register', async (req, res) => {
   }
 });
 
+// Get a specific user by userId for verification
+router.get('/verify/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const user = await User.findOne({ userId });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Return only safe, non-sensitive user data needed for the frontend
+    res.json({
+      userId: user.userId,
+      profession: user.profession,
+      yearsExperience: user.yearsExperience,
+      completedEvaluations: user.completedEvaluations,
+    });
+  } catch (error) {
+    console.error(`Error verifying user ${req.params.userId}:`, error);
+    res.status(500).json({
+      error: 'Failed to verify user data',
+      details: error.message,
+    });
+  }
+});
+
 // Get user by ID
 router.get('/:userId', async (req, res) => {
   try {
@@ -130,29 +156,16 @@ router.put('/:userId/completed', async (req, res) => {
   }
 });
 
-// Get all users (for admin/research purposes)
+// Get all users (for admin purposes, consider adding auth middleware)
 router.get('/', async (req, res) => {
   try {
-    const users = await User.find({}, {
-      userId: 1,
-      profession: 1,
-      yearsExperience: 1,
-      sessionStart: 1,
-      completedEvaluations: 1,
-      lastActivity: 1,
-      createdAt: 1
-    }).sort({ createdAt: -1 });
-
-    res.json({
-      users,
-      totalUsers: users.length
-    });
-
+    const users = await User.find().sort({ createdAt: -1 });
+    res.json(users);
   } catch (error) {
     console.error('Error fetching users:', error);
     res.status(500).json({
       error: 'Failed to fetch users',
-      details: error.message
+      details: error.message,
     });
   }
 });

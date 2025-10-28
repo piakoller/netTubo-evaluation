@@ -122,21 +122,46 @@ class DataService {
         evaluationStartTime: evaluation.evaluationStartTime || new Date().toISOString()
       };
 
+      // Prepare the payload with correct field mapping
+      const payload = {
+        userId: evaluationData.user_data?.userId,
+        patientId: evaluationData.patient_id,
+        evaluation_type: evaluationData.evaluation_type || 'main',
+        userData: evaluationData.user_data,
+        evaluationStartTime: evaluationData.evaluationStartTime,
+        
+        // Main evaluation fields
+        recommendation_type: evaluationData.recommendation_type,
+        overallRating: evaluationData.overall_rating,
+        implementationWillingness: evaluationData.implementation_willingness,
+        comments: evaluationData.comments || '',
+        
+        // Detailed Yes/No questions
+        guideline_adherence: evaluationData.guideline_adherence,
+        clinical_trial_integration: evaluationData.clinical_trial_integration,
+        diagnostic_soundness: evaluationData.diagnostic_soundness,
+        clinical_appropriateness: evaluationData.clinical_appropriateness,
+        contraindication_awareness: evaluationData.contraindication_awareness,
+        treatment_completeness: evaluationData.treatment_completeness,
+        rationale_clarity: evaluationData.rationale_clarity,
+        risk_benefit_transparency: evaluationData.risk_benefit_transparency,
+        consideration_alternatives: evaluationData.consideration_alternatives,
+        actionable_next_steps: evaluationData.actionable_next_steps,
+        personalization: evaluationData.personalization,
+        quality_of_life: evaluationData.quality_of_life,
+        
+        // Expert evaluation fields (if applicable)
+        expert_agreement: evaluationData.expert_agreement,
+        expert_comments: evaluationData.expert_comments
+      };
+
       // Send to database
       const response = await fetch(`${this.baseURL}/evaluations`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          userId: evaluationData.user_data?.userId,
-          patientId: evaluationData.patient_id,
-          overallRating: evaluationData.overall_rating,
-          implementationWillingness: evaluationData.implementation_willingness,
-          comments: evaluationData.comments || '',
-          userData: evaluationData.user_data,
-          evaluationStartTime: evaluationData.evaluationStartTime
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
