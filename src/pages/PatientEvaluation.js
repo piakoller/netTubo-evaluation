@@ -3,6 +3,7 @@ import { Card, Typography, Row, Col, message, Progress, Button } from 'antd';
 import { MedicineBoxOutlined, CheckCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import PatientInfo from '../components/PatientInfo';
 import EvaluationForm from '../components/EvaluationForm';
+import { useRef } from 'react';
 import dataService from '../services/dataService';
 import TherapyRecommendation from '../components/TherapyRecommendation';
 
@@ -29,6 +30,10 @@ const PatientEvaluation = ({ userData }) => {
   const [recommendationQueues, setRecommendationQueues] = useState({});
   const [completedEvaluations, setCompletedEvaluations] = useState(new Set());
   const [studyCompleted, setStudyCompleted] = useState(false);
+  // Track a patient that is awaiting expert-evaluation so we keep the form mounted
+  const [pendingExpertPatientId, setPendingExpertPatientId] = useState(null);
+  // Ref to trigger expert modal in EvaluationForm
+  const expertModalTriggerRef = useRef(null);
 
   // --- Data Loading Effect ---
   // Load patients from dataService and build recommendation queues (baseline then agentic)
@@ -73,10 +78,19 @@ const PatientEvaluation = ({ userData }) => {
   // This logic was floating in the original file
   useEffect(() => {
     if (loading || Object.keys(patients).length === 0) return; // Don't run until loaded
+    // If an expert evaluation is pending for a patient, keep that patient selected
+    if (pendingExpertPatientId) {
+      if (pendingExpertPatientId !== selectedPatientId) {
+        setSelectedPatientId(pendingExpertPatientId);
+        setSelectedPatient(patients[pendingExpertPatientId]);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      return;
+    }
 
     const sorted = getSortedIds(patients);
     const next = sorted.find((id) => (recommendationQueues[id] || []).length > 0 && !completedEvaluations.has(id));
-    
+
     if (next && next !== selectedPatientId) {
       setSelectedPatientId(next);
       setSelectedPatient(patients[next]);
@@ -102,7 +116,19 @@ const PatientEvaluation = ({ userData }) => {
 
   const currentRecommendation = getCurrentRecommendation();
 
-  // --- Callback Handlers ---
+  // --- Effect: Auto-open expert modal when needed ---
+  useEffect(() => {
+    if (
+      selectedPatient &&
+      recommendationQueues[selectedPatientId]?.length === 0 &&
+      selectedPatient.expert_recommendation &&
+      pendingExpertPatientId === selectedPatientId &&
+      expertModalTriggerRef.current
+    ) {
+      // Call the trigger function in EvaluationForm
+      expertModalTriggerRef.current();
+    }
+  }, [selectedPatient, selectedPatientId, recommendationQueues, pendingExpertPatientId]);
   
   const saveCompletedEvaluation = useCallback(async (patientId) => {
     const newCompleted = new Set([...completedEvaluations, patientId]);
@@ -149,8 +175,19 @@ const PatientEvaluation = ({ userData }) => {
 
       // if queue now empty, persist completed flag
       if (!q || q.length === 0) {
-        await saveCompletedEvaluation(selectedPatientId);
-        // The auto-select useEffect will handle picking the next patient
+        // If there is an expert recommendation, defer marking completed
+        // until the expert evaluation has been submitted. This avoids
+        // unmounting the EvaluationForm (which holds the expert modal)
+        // before the modal can be shown.
+        if (selectedPatient?.expert_recommendation) {
+          // mark this patient as pending expert evaluation so we keep it selected
+          setPendingExpertPatientId(selectedPatientId);
+          // ensure the selectedPatient stays in state (no-op if already set)
+          setSelectedPatient(patients[selectedPatientId]);
+        } else {
+          await saveCompletedEvaluation(selectedPatientId);
+        }
+        // Otherwise: leave the patient selected and wait for expert evaluation
       } else {
         // keep same patient selected so that evaluationType changes and form re-renders
         // (key uses recommendation type)
@@ -182,12 +219,17 @@ const PatientEvaluation = ({ userData }) => {
       if (q.length > 0) {
         setSelectedPatient(patients[selectedPatientId]);
       }
-      // If queue is empty, the auto-select effect will run and pick the next patient
+      // If queue is empty and this patient was pending expert evaluation, mark it completed
+      if ((q.length === 0) && pendingExpertPatientId === selectedPatientId) {
+        // clear pending flag and persist completed
+        setPendingExpertPatientId(null);
+        await saveCompletedEvaluation(selectedPatientId);
+      }
     } catch (err) {
       console.error('Error saving expert evaluation', err);
       message.error('Failed to save expert evaluation');
     }
-  }, [selectedPatientId, userData, recommendationQueues, patients]);
+  }, [selectedPatientId, userData, recommendationQueues, patients, pendingExpertPatientId, saveCompletedEvaluation, setPendingExpertPatientId]);
 
   const handleRestartStudy = useCallback(() => {
     setCompletedEvaluations(new Set());
@@ -266,12 +308,13 @@ const PatientEvaluation = ({ userData }) => {
             <Title level={2}><CheckCircleOutlined style={{ marginRight: 8 }} />Evaluation</Title>
             {selectedPatient ? (
               <EvaluationForm
-                key={`${selectedPatientId}-${currentRecommendation?.type || 'none'}`} // re-render when recommendation type changes
+                key={`${selectedPatientId}-${pendingExpertPatientId === selectedPatientId ? 'expert' : (currentRecommendation?.type || 'none')}`}
                 onSubmit={handleEvaluationSubmit}
                 onExpertSubmit={handleExpertEvaluationSubmit}
                 loading={submitting}
                 expertRecommendation={selectedPatient.expert_recommendation}
                 recommendationType={currentRecommendation?.type}
+                expertModalTriggerRef={expertModalTriggerRef}
               />
             ) : (
               <Card><p>Select a patient to begin evaluation.</p></Card>

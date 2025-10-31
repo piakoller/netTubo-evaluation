@@ -17,10 +17,17 @@ import { MedicineBoxOutlined } from '@ant-design/icons';
 const { TextArea } = Input;
 const { Text, Title } = Typography;
 
-const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendation }) => {
+const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendation, expertModalTriggerRef }) => {
   const [form] = Form.useForm();
   const [expertForm] = Form.useForm();
   const [showExpertModal, setShowExpertModal] = useState(false);
+
+  // Allow parent to trigger the expert modal
+  React.useEffect(() => {
+    if (expertModalTriggerRef) {
+      expertModalTriggerRef.current = () => setShowExpertModal(true);
+    }
+  }, [expertModalTriggerRef]);
   const [expertEvaluationSubmitted, setExpertEvaluationSubmitted] = useState(false);
 
   // Yes/No options for detailed evaluation
@@ -157,6 +164,16 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
 
       await onSubmit(evaluationData);
       
+      // Jump to the top of the page so the expert modal (if any) is visible
+      if (typeof window !== 'undefined' && window.scrollTo) {
+        try {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } catch (e) {
+          // fallback for older browsers
+          window.scrollTo(0, 0);
+        }
+      }
+
       // Show expert recommendation modal after successful submission
       if (expertRecommendation) {
         setShowExpertModal(true);
