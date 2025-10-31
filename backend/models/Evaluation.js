@@ -14,19 +14,23 @@ const evaluationSchema = new mongoose.Schema({
   implementationWillingness: { type: String, enum: ['yes', 'maybe', 'no'] },
   comments: { type: String, default: '' },
 
-  // Detailed Yes/No Questions
-  guideline_adherence: { type: String, enum: ['yes', 'no'] },
-  clinical_trial_integration: { type: String, enum: ['yes', 'no'] },
-  diagnostic_soundness: { type: String, enum: ['yes', 'no'] },
-  clinical_appropriateness: { type: String, enum: ['yes', 'no'] },
-  contraindication_awareness: { type: String, enum: ['yes', 'no'] },
-  treatment_completeness: { type: String, enum: ['yes', 'no'] },
-  rationale_clarity: { type: String, enum: ['yes', 'no'] },
-  risk_benefit_transparency: { type: String, enum: ['yes', 'no'] },
-  consideration_alternatives: { type: String, enum: ['yes', 'no'] },
-  actionable_next_steps: { type: String, enum: ['yes', 'no'] },
-  personalization: { type: String, enum: ['yes', 'no'] },
-  quality_of_life: { type: String, enum: ['yes', 'no'] },
+
+  // Category 1: Evidence Retrieval
+  guideline_found: { type: String, enum: ['yes', 'no'] }, // Has the chatbot found and included at least one relevant guideline?
+  cites_primary_study: { type: String, enum: ['yes', 'no'] }, // Does the answer cite at least one peer-reviewed primary study?
+  acknowledges_new_data: { type: String, enum: ['yes', 'no'] }, // If newer data exist, does the answer acknowledge them?
+  citations_real: { type: String, enum: ['yes', 'no'] }, // Do all citations correspond to real, retrievable sources?
+
+  // Category 2: Clinical Soundness and Safety
+  clinical_appropriateness: { type: String, enum: ['yes', 'no'] }, // Is the primary recommended therapy suitable for the patient?
+  contraindication_awareness: { type: String, enum: ['yes', 'no'] }, // Does the recommendation avoid contraindicated treatments?
+  treatment_completeness: { type: String, enum: ['yes', 'no'] }, // Does the recommendation address all necessary modalities?
+  notes_guideline_evidence_conflict: { type: String, enum: ['yes', 'no'] }, // If guidelines conflict with new evidence, does the answer note it?
+
+  // Category 3: Actionability and Patient-Centeredness
+  actionable_next_steps: { type: String, enum: ['yes', 'no'] }, // Does the recommendation define clear next steps?
+  personalization: { type: String, enum: ['yes', 'no'] }, // Is the plan tailored to patient-specific factors?
+  quality_of_life: { type: String, enum: ['yes', 'no'] }, // Does the recommendation address quality of life?
 
   // For expert recommendation evaluations
   expert_agreement: { type: String, enum: ['strongly_agree', 'agree', 'neutral', 'disagree', 'strongly_disagree'] },
