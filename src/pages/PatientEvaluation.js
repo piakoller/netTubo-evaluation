@@ -8,294 +8,203 @@ import TherapyRecommendation from '../components/TherapyRecommendation';
 
 const { Title, Text } = Typography;
 
+// Helper function (assuming sorting by case_id or similar)
+// Moved outside the component to avoid being part of its definition
+const getSortedIds = (patients) => {
+  if (!patients) return [];
+  // Example sorting logic, adjust as needed
+  return Object.keys(patients).sort((a, b) => (patients[a]?.case_id || 0) - (patients[b]?.case_id || 0));
+};
+
 const PatientEvaluation = ({ userData }) => {
+  // --- State Definitions ---
+  // Merged from the top of the broken file
   const [patients, setPatients] = useState({});
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [selectedPatient, setSelectedPatient] = useState(null);
+  
+  // Inferred from usage in the broken file
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [recommendationQueues, setRecommendationQueues] = useState({});
   const [completedEvaluations, setCompletedEvaluations] = useState(new Set());
   const [studyCompleted, setStudyCompleted] = useState(false);
-  const [shuffledRecommendations, setShuffledRecommendations] = useState({});
 
-  // Helper: Shuffle recommendations for a patient and store the order
-  const getShuffledRecommendation = useCallback((patient) => {
-    if (!patient) return null;
-
-    // Check if we have already shuffled for this patient
-    if (shuffledRecommendations[patient.patient_id]) {
-      return shuffledRecommendations[patient.patient_id];
-    }
-
-    const recommendations = [
-      { type: 'agentic', data: patient.recommendation },
-      { type: 'baseline', data: patient.baseline_recommendation }
-    ].filter(rec => rec.data); // Filter out any null/undefined recommendations
-
-    // Shuffle the array
-    const shuffled = recommendations.sort(() => 0.5 - Math.random());
-    
-    // Store the shuffled order
-    const newShuffled = { ...shuffledRecommendations, [patient.patient_id]: shuffled[0] };
-    setShuffledRecommendations(newShuffled);
-
-    return shuffled[0];
-  }, [shuffledRecommendations]);
-
-  // When a new patient is selected, get a shuffled recommendation
+  // --- Data Loading Effect ---
+  // Load patients from dataService and build recommendation queues (baseline then agentic)
   useEffect(() => {
-    if (selectedPatient) {
-      getShuffledRecommendation(selectedPatient);
-    }
-  }, [selectedPatient, getShuffledRecommendation]);
-
-  const currentRecommendation = selectedPatient ? getShuffledRecommendation(selectedPatient) : null;
-
-
-  // Helper: normalize and sort patient IDs numerically when possible
-  const getSortedIds = (obj) => {
-    const ids = Object.keys(obj || {});
-    const allNumeric = ids.every((id) => /^\d+$/.test(String(id)));
-    if (allNumeric) {
-      return ids.sort((a, b) => Number(a) - Number(b));
-    }
-    return ids.sort();
-  };
-
-  // Helper: pick next patient id
-  // Always start with Patient 1 and proceed sequentially: 1 → 2 → 3
-  // Skip completed patients and always pick the lowest numbered incomplete patient
-  const pickNextPatientId = useCallback((patientsMap, completedSet, currentId = null) => {
-    const sorted = getSortedIds(patientsMap);
-    const notCompleted = sorted.filter((id) => !completedSet.has(id));
-    if (notCompleted.length === 0) return null;
-
-    // Always return the smallest (first) available patient ID
-    // This ensures we go: 1 → 2 → 3 in order
-    return notCompleted[0];
-  }, []);
-
-  const loadCompletedEvaluations = useCallback(async () => {
-    try {
-      // Try to load from database first
-      if (userData?.userId) {
-        const response = await fetch(`http://localhost:5001/api/users/${userData.userId}`);
-        if (response.ok) {
-          const result = await response.json();
-          const completedSet = new Set(result.user?.completedEvaluations || []);
-          setCompletedEvaluations(completedSet);
-          console.log('Loaded completed evaluations from database:', completedSet.size);
-          return;
-        }
-      }
-    } catch (error) {
-      console.warn('Could not load completed evaluations from database:', error.message);
-    }
-    
-    // Fallback to localStorage
-    const completed = localStorage.getItem(`completedEvaluations_${userData?.userId}`);
-    if (completed) {
-      setCompletedEvaluations(new Set(JSON.parse(completed)));
-    }
-  }, [userData?.userId]);
-
-  useEffect(() => {
-    // Load completed evaluations first, then patients
-    // This ensures proper auto-selection on page load
     const loadData = async () => {
-      await loadCompletedEvaluations();
-      await loadPatients();
+      try {
+        setLoading(true);
+        const fetchedPatients = await dataService.loadPatientRecommendations();
+        const patientsMap = fetchedPatients || {};
+        setPatients(patientsMap);
+
+        // build queues: baseline first then agentic
+        const queues = {};
+        Object.keys(patientsMap || {}).forEach((pid) => {
+          const p = patientsMap[pid];
+          const q = [];
+          if (p?.baseline_recommendation) q.push('baseline');
+          if (p?.recommendation) q.push('agentic');
+          queues[pid] = q;
+        });
+        setRecommendationQueues(queues);
+
+        // Load completed status from localStorage as fallback
+        const savedCompleted = localStorage.getItem(`completedEvaluations_${userData?.userId}`);
+        if (savedCompleted) setCompletedEvaluations(new Set(JSON.parse(savedCompleted)));
+      } catch (err) {
+        console.error('Failed to load data', err);
+        message.error('Failed to load patient data');
+      } finally {
+        setLoading(false);
+      }
     };
-    loadData();
-  }, [loadCompletedEvaluations]);
 
-  const loadPatients = async () => {
-    try {
-      setLoading(true);
-      const patientData = await dataService.loadPatientRecommendations();
-      setPatients(patientData);
-
-      // Auto-selection will be handled by the useEffect that watches for changes
-      // in patients and completedEvaluations
-    } catch (error) {
-      message.error('Failed to load patient data');
-      console.error('Error loading patients:', error);
-    } finally {
+    if (userData?.userId) {
+      loadData();
+    } else {
       setLoading(false);
     }
-  };
+  }, [userData]);
 
-  const saveCompletedEvaluation = async (patientId) => {
+  // --- Auto-select Next Patient Effect ---
+  // This logic was floating in the original file
+  useEffect(() => {
+    if (loading || Object.keys(patients).length === 0) return; // Don't run until loaded
+
+    const sorted = getSortedIds(patients);
+    const next = sorted.find((id) => (recommendationQueues[id] || []).length > 0 && !completedEvaluations.has(id));
+    
+    if (next && next !== selectedPatientId) {
+      setSelectedPatientId(next);
+      setSelectedPatient(patients[next]);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Check if study is complete
+    const anyRemaining = Object.keys(recommendationQueues).some((id) => (recommendationQueues[id] || []).length > 0 && !completedEvaluations.has(id));
+    if (!anyRemaining && Object.keys(patients).length > 0) {
+      setStudyCompleted(true);
+    }
+  }, [patients, recommendationQueues, completedEvaluations, selectedPatientId, loading]);
+
+  // --- Derived State ---
+  // Get the current recommendation object (type + data) for the selected patient
+  const getCurrentRecommendation = useCallback(() => {
+    if (!selectedPatientId || !selectedPatient) return null;
+    const q = recommendationQueues[selectedPatientId] || [];
+    const t = q.length > 0 ? q[0] : null;
+    if (!t) return null;
+    return t === 'baseline' ? { type: 'baseline', data: selectedPatient.baseline_recommendation } : { type: 'agentic', data: selectedPatient.recommendation };
+  }, [recommendationQueues, selectedPatient, selectedPatientId]);
+
+  const currentRecommendation = getCurrentRecommendation();
+
+  // --- Callback Handlers ---
+  
+  const saveCompletedEvaluation = useCallback(async (patientId) => {
     const newCompleted = new Set([...completedEvaluations, patientId]);
     setCompletedEvaluations(newCompleted);
-    
-    // Save to localStorage as backup
     localStorage.setItem(`completedEvaluations_${userData?.userId}`, JSON.stringify([...newCompleted]));
-    
-    // Update in database
     try {
       if (userData?.userId) {
-        const response = await fetch(`http://localhost:5001/api/users/${userData.userId}/completed`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ patientId })
+        await fetch(`http://localhost:5001/api/users/${userData.userId}/completed`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ patientId })
         });
-        
-        if (response.ok) {
-          console.log('Updated completed evaluations in database');
-        } else {
-          console.warn('Could not update completed evaluations in database');
-        }
       }
-    } catch (error) {
-      console.warn('Error updating completed evaluations in database:', error.message);
+    } catch (err) {
+      console.warn('Error updating completed evaluations in DB', err.message);
     }
-  };
+  }, [completedEvaluations, userData?.userId]);
 
   const handlePatientSelect = useCallback((patientId) => {
     setSelectedPatientId(patientId);
     setSelectedPatient(patients[patientId]);
-    
-    // Scroll to top when selecting a new patient
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [patients]);
 
-  // Auto-select if selection becomes empty or invalid due to data refresh
-  // Always ensures Patient 1 is selected first (if not completed), then Patient 2, etc.
-  useEffect(() => {
-    const current = selectedPatientId;
-    const currentExists = current && patients[current];
-    
-    // If no patient is selected, or current selection doesn't exist, or both patients and completedEvaluations are loaded
-    if (!selectedPatient || !currentExists || (Object.keys(patients).length > 0 && !selectedPatientId)) {
-      const nextId = pickNextPatientId(patients, completedEvaluations, currentExists ? current : null);
-      if (nextId && nextId !== current) {
-        console.log(`Auto-selecting next patient: ${nextId}`);
-        handlePatientSelect(nextId);
-      }
-    }
-  }, [patients, selectedPatient, selectedPatientId, completedEvaluations, pickNextPatientId, handlePatientSelect]);
-
-  const handleEvaluationSubmit = async (evaluationData) => {
+  // Merged the two duplicate functions from the original file
+  const handleEvaluationSubmit = useCallback(async (evaluationData) => {
+    if (!selectedPatientId) return;
+    setSubmitting(true);
     try {
-      setSubmitting(true);
-      
       const evaluation = {
         patient_id: selectedPatientId,
         user_data: userData,
-        recommendation_type: currentRecommendation?.type, // Store whether 'agentic' or 'baseline' was shown
+        recommendation_type: currentRecommendation?.type,
         timestamp: new Date().toISOString(),
-        evaluationStartTime: new Date().toISOString(), // You might want to track actual start time
         ...evaluationData
       };
-
-      // Save evaluation to database
       await dataService.saveEvaluation(evaluation);
-      
-      // Mark this patient as completed
-      await saveCompletedEvaluation(selectedPatientId);
-      
-      message.success('Evaluation submitted successfully!');
-      
-      // Check if there are more patients available
-      const nextPatient = pickNextPatientId(patients, new Set([...completedEvaluations, selectedPatientId]), selectedPatientId);
+      message.success('Evaluation submitted');
 
-      // If there's no expert recommendation, handle progression immediately
-      if (!selectedPatient.expert_recommendation) {
-        if (nextPatient) {
-          // There are more patients - proceed to next one
-          setTimeout(() => {
-            handlePatientSelect(nextPatient);
-            message.info('Loading next patient case...');
-          }, 1500);
-        } else {
-          // This is the last patient - show completion
-          setTimeout(() => {
-            setSelectedPatientId(null);
-            setSelectedPatient(null);
-            setStudyCompleted(true);
-            message.success('All evaluations completed! Thank you for your participation.');
-          }, 1500);
-        }
+      // compute updated queue synchronously
+      const newQueues = { ...recommendationQueues };
+      const q = Array.isArray(newQueues[selectedPatientId]) ? [...newQueues[selectedPatientId]] : [];
+      q.shift(); // Remove the item that was just evaluated
+      newQueues[selectedPatientId] = q;
+      setRecommendationQueues(newQueues);
+
+      // if queue now empty, persist completed flag
+      if (!q || q.length === 0) {
+        await saveCompletedEvaluation(selectedPatientId);
+        // The auto-select useEffect will handle picking the next patient
       } else {
-        // There is an expert recommendation - the expert evaluation modal will handle progression
-        console.log('Expert recommendation exists - waiting for expert evaluation');
+        // keep same patient selected so that evaluationType changes and form re-renders
+        // (key uses recommendation type)
+        setSelectedPatient(patients[selectedPatientId]);
       }
-      
-    } catch (error) {
-      message.error('Failed to submit evaluation');
-      console.error('Error submitting evaluation:', error);
+    } catch (err) {
+      console.error('Error saving evaluation', err);
+      message.error('Failed to save evaluation');
     } finally {
       setSubmitting(false);
     }
-  };
+  }, [selectedPatientId, userData, currentRecommendation, recommendationQueues, patients, saveCompletedEvaluation]);
 
-  const handleExpertEvaluationSubmit = async (expertEvaluationData) => {
+  const handleExpertEvaluationSubmit = useCallback(async (expertEvaluationData) => {
+    if (!selectedPatientId) return;
     try {
-      const expertEvaluation = {
-        patient_id: selectedPatientId,
-        user_data: userData,
-        timestamp: new Date().toISOString(),
-        evaluation_type: 'expert_recommendation',
-        ...expertEvaluationData
+      const payload = { 
+        patient_id: selectedPatientId, 
+        user_data: userData, 
+        timestamp: new Date().toISOString(), 
+        evaluation_type: 'expert_recommendation', 
+        ...expertEvaluationData 
       };
+      await dataService.saveEvaluation(payload);
+      message.success('Expert evaluation submitted');
 
-      // Save expert evaluation to database
-      await dataService.saveEvaluation(expertEvaluation);
-      
-      message.success('Expert evaluation submitted successfully!');
-      
-      // Now handle next patient or completion
-      const nextPatient = pickNextPatientId(patients, new Set([...completedEvaluations, selectedPatientId]), selectedPatientId);
-
-      if (nextPatient) {
-        // There are more patients - proceed to next one
-        setTimeout(() => {
-          handlePatientSelect(nextPatient);
-          message.info('Loading next patient case...');
-        }, 1500);
-      } else {
-        // All patients completed - show completion screen
-        setTimeout(() => {
-          setSelectedPatientId(null);
-          setSelectedPatient(null);
-          setStudyCompleted(true);
-          message.success('All evaluations completed! Thank you for your participation.');
-        }, 1500);
+      // If current patient still has remaining items, continue; otherwise auto-select will pick next
+      const q = recommendationQueues[selectedPatientId] || [];
+      if (q.length > 0) {
+        setSelectedPatient(patients[selectedPatientId]);
       }
-      
-    } catch (error) {
-      console.error('Error submitting expert evaluation:', error);
-      message.error('Failed to submit expert evaluation. Please try again.');
+      // If queue is empty, the auto-select effect will run and pick the next patient
+    } catch (err) {
+      console.error('Error saving expert evaluation', err);
+      message.error('Failed to save expert evaluation');
     }
-  };
+  }, [selectedPatientId, userData, recommendationQueues, patients]);
 
   const handleRestartStudy = useCallback(() => {
-    // Clear all completed evaluations
     setCompletedEvaluations(new Set());
     setStudyCompleted(false);
-    
-    // Clear localStorage
     if (userData?.userId) {
       localStorage.removeItem(`completedEvaluations_${userData.userId}`);
     }
-    
-    // Reset to first patient
-    const firstPatientId = pickNextPatientId(patients, new Set(), null);
-    if (firstPatientId) {
-      handlePatientSelect(firstPatientId);
-      message.info('Study restarted. Starting with Patient 1...');
-    }
-  }, [handlePatientSelect, patients, pickNextPatientId, userData?.userId]);
+    // Let the auto-select useEffect find the first patient
+    // Resetting selected patient id to trigger the effect
+    setSelectedPatientId(null);
+    setSelectedPatient(null);
+  }, [userData?.userId]);
+
+  // --- Render Logic ---
 
   if (loading) {
-    return (
-      <Card loading={true} style={{ minHeight: '400px' }}>
-        <div>Loading patient data...</div>
-      </Card>
-    );
+    return <Card loading style={{ minHeight: 400 }}>Loading patient data...</Card>;
   }
 
   const totalPatients = Object.keys(patients).length;
@@ -306,14 +215,10 @@ const PatientEvaluation = ({ userData }) => {
     return (
       <div style={{ maxWidth: '800px', margin: '40px auto', textAlign: 'center' }}>
         <Card>
-          <CheckCircleOutlined style={{ fontSize: '48px', color: '#52c41a', marginBottom: '24px' }} />
+          <CheckCircleOutlined style={{ fontSize: 48, color: '#52c41a', marginBottom: 24 }} />
           <Title level={2}>Study Completed</Title>
-          <Text style={{ fontSize: '16px', display: 'block', marginBottom: '32px' }}>
-            Thank you for completing all the evaluations. Your participation is greatly appreciated!
-          </Text>
-          <Button type="primary" icon={<ReloadOutlined />} onClick={handleRestartStudy}>
-            Restart Study
-          </Button>
+          <Text style={{ fontSize: 16, display: 'block', marginBottom: 32 }}>Thank you for completing all the evaluations. Your participation is greatly appreciated!</Text>
+          <Button type="primary" icon={<ReloadOutlined />} onClick={handleRestartStudy}>Restart Study</Button>
         </Card>
       </div>
     );
@@ -321,29 +226,21 @@ const PatientEvaluation = ({ userData }) => {
 
   return (
     <div style={{ maxWidth: '1600px', margin: '0 auto' }}>
-      {/* User Info Header */}
-      <Card style={{ marginBottom: '16px' }}>
+      <Card style={{ marginBottom: 16 }}>
         <Row justify="space-between" align="middle">
           <Col>
             <Text strong>Participant: </Text>
             <Text>{userData?.userId}</Text>
-            <Text style={{ marginLeft: '16px' }}>
-              {userData?.profession} | {userData?.yearsExperience} years experience
-            </Text>
+            <Text style={{ marginLeft: 16 }}>{userData?.profession} | {userData?.yearsExperience} years experience</Text>
           </Col>
           <Col>
             <Text strong>Progress: </Text>
             <Text>{completedCount}/{totalPatients} cases completed</Text>
-            <Progress 
-              percent={progressPercent.toFixed(1)} 
-              size="small" 
-              style={{ width: '200px', marginLeft: '16px' }}
-            />
+            <Progress percent={progressPercent.toFixed(1)} size="small" style={{ width: 200, marginLeft: 16 }} />
           </Col>
         </Row>
       </Card>
 
-      {/* Patient Information */}
       {selectedPatient && (
         <Card style={{ marginBottom: 16 }}>
           <PatientInfo patient={selectedPatient} />
@@ -352,43 +249,32 @@ const PatientEvaluation = ({ userData }) => {
 
       <Card>
         <Row gutter={[16, 16]}>
-          {/* Left column: Recommendation */}
           <Col xs={24} lg={12}>
-            <Title level={2}>
-              <MedicineBoxOutlined style={{ marginRight: '8px' }} />
-              Recommendation
-            </Title>
+            <Title level={2}><MedicineBoxOutlined style={{ marginRight: 8 }} />Recommendation</Title>
             {selectedPatient && currentRecommendation ? (
-              <TherapyRecommendation
-                recommendation={currentRecommendation.data}
-                trialData={selectedPatient.trial_data || []}
-                recommendationType={currentRecommendation.type}
+              <TherapyRecommendation 
+                recommendation={currentRecommendation.data} 
+                trialData={selectedPatient.trial_data || []} 
+                recommendationType={currentRecommendation.type} 
               />
             ) : (
-              <Card>
-                <p>No recommendation to display.</p>
-              </Card>
+              <Card><p>{selectedPatient ? "This patient's queue is complete." : "No recommendation to display."}</p></Card>
             )}
           </Col>
 
-          {/* Right column: Evaluation */}
           <Col xs={24} lg={12}>
-            <Title level={2}>
-              <CheckCircleOutlined style={{ marginRight: '8px' }} />
-              Evaluation
-            </Title>
+            <Title level={2}><CheckCircleOutlined style={{ marginRight: 8 }} />Evaluation</Title>
             {selectedPatient ? (
               <EvaluationForm
-                key={selectedPatientId} // Force re-render on patient change
+                key={`${selectedPatientId}-${currentRecommendation?.type || 'none'}`} // re-render when recommendation type changes
                 onSubmit={handleEvaluationSubmit}
                 onExpertSubmit={handleExpertEvaluationSubmit}
                 loading={submitting}
                 expertRecommendation={selectedPatient.expert_recommendation}
+                recommendationType={currentRecommendation?.type}
               />
             ) : (
-              <Card>
-                <p>Select a patient to begin evaluation.</p>
-              </Card>
+              <Card><p>Select a patient to begin evaluation.</p></Card>
             )}
           </Col>
         </Row>

@@ -1,7 +1,10 @@
 const mongoose = require('mongoose');
 
 const evaluationSchema = new mongoose.Schema({
-  evaluationId: { type: String, required: true, unique: true, index: true },
+  // Note: evaluationId is indexed below with a partial filter so documents
+  // that don't have this field (e.g., UserEvaluationSession documents)
+  // won't violate the unique constraint.
+  evaluationId: { type: String, required: true },
   userId: { type: String, required: true, ref: 'User', index: true },
   patientId: { type: String, required: true, index: true },
 
@@ -72,5 +75,10 @@ evaluationSchema.pre('save', function(next) {
 evaluationSchema.index({ userId: 1, patientId: 1 });
 evaluationSchema.index({ createdAt: -1 });
 evaluationSchema.index({ patientId: 1, createdAt: -1 });
+// Create a unique index on evaluationId but only for documents where it exists
+evaluationSchema.index(
+  { evaluationId: 1 },
+  { unique: true, partialFilterExpression: { evaluationId: { $type: 'string' } } }
+);
 
 module.exports = mongoose.model('Evaluation', evaluationSchema);

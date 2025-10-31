@@ -29,93 +29,81 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
     { value: 'no', label: 'No' }
   ];
 
-  // Evaluation categories and questions
+  // Evaluation categories and questions (updated to match user specification)
   const evaluationCategories = [
     {
-      key: 'evidence_foundation',
-      title: 'Category 1: Evidence Foundation',
+      key: 'evidence_retrieval',
+      title: 'Category 1: Evidence Retrieval',
       description: 'Evaluates how well the recommendation is grounded in established medical knowledge',
       questions: [
         {
-          key: 'guideline_adherence',
-          label: 'Guideline Adherence',
-          description: 'Does the recommendation explicitly cite and align with current, high-level clinical practice guidelines (ESMO, ENETS) relevant to the patient\'s diagnosis?'
+          key: 'guideline_found',
+          label: 'Has the chatbot found and included at least one relevant guideline (regardless if the recommendation is aligned with the guideline)?',
+          description: ''
         },
         {
-          key: 'clinical_trial_integration',
-          label: 'Clinical Trial Integration', 
-          description: 'Does the recommendation cite specific, relevant clinical trials to justify the recommended therapies, particularly for advanced or contingent scenarios?'
+          key: 'cites_primary_study',
+          label: 'Does the answer cite at least one peer-reviewed primary study (trial or high-quality observational study) relevant to the recommendation?',
+          description: ''
         },
         {
-          key: 'diagnostic_soundness',
-          label: 'Diagnostic Soundness',
-          description: 'Are the recommended diagnostic and staging procedures (e.g., imaging, biomarkers) appropriate and in line with current standards of care?'
+          key: 'acknowledges_new_data',
+          label: 'If newer, potentially practice-changing data exist (e.g., conference abstracts, preprints, press releases), does the answer acknowledge them?',
+          description: ''
+        },
+        {
+          key: 'citations_real',
+          label: 'Do all citations correspond to real, retrievable sources?',
+          description: ''
         }
       ]
     },
     {
       key: 'clinical_soundness',
       title: 'Category 2: Clinical Soundness and Safety',
-      description: 'Evaluates the appropriateness and safety of the plan for the specific patient',
+      description: 'Evaluates the appropriateness and safety of the plan for the specific patient.',
       questions: [
         {
           key: 'clinical_appropriateness',
-          label: 'Clinical Appropriateness',
-          description: 'Is the primary recommended therapy (or sequence of therapies) a suitable and recognized option for the patient\'s specific cancer type, grade, stage, and molecular profile?'
+          label: 'Clinical Appropriateness: Is the primary recommended therapy (or sequence of therapies) a suitable and recognized option for the patient\'s specific cancer type, grade, stage, and molecular profile?',
+          description: ''
         },
         {
           key: 'contraindication_awareness',
-          label: 'Contraindication Awareness',
-          description: 'Does the recommendation demonstrate awareness of the patient\'s specific clinical state (e.g., acute bleeding, organ dysfunction) and avoid treatments that would be clearly contraindicated?'
+          label: 'Contraindication Awareness: Does the recommendation demonstrate awareness of the patient\'s specific clinical state (e.g., acute complications, organ dysfunction) and avoid treatments that would be clearly contraindicated?',
+          description: ''
         },
         {
           key: 'treatment_completeness',
-          label: 'Treatment Completeness',
-          description: 'Does the recommendation address all necessary and appropriate treatment modalities for this clinical case (e.g., surgery, systemic therapy, supportive care)?'
-        }
-      ]
-    },
-    {
-      key: 'recommendation_quality',
-      title: 'Category 3: Recommendation Quality and Rationale',
-      description: 'Evaluates the logical structure, transparency, and decision-making quality of the output',
-      questions: [
-        {
-          key: 'rationale_clarity',
-          label: 'Rationale Clarity',
-          description: 'Is the clinical reasoning that connects the patient\'s data, guidelines, and trial evidence to the final recommendation explicitly stated and logical?'
+          label: 'Treatment Completeness: Does the recommendation address all necessary and appropriate treatment modalities for this clinical case (e.g., surgery, systemic therapy, supportive care)?',
+          description: ''
         },
         {
-          key: 'risk_benefit_transparency',
-          label: 'Risk-Benefit Transparency',
-          description: 'Does the recommendation explicitly state both the potential benefits (e.g., survival data, disease control) and the potential significant risks or toxicities of the proposed treatments?'
-        },
-        {
-          key: 'consideration_alternatives',
-          label: 'Consideration of Alternatives',
-          description: 'Does the recommendation present clinically valid alternative treatment options for key decision points, especially if the optimal path is uncertain?'
+          key: 'notes_guideline_evidence_conflict',
+          label: 'If major guidelines conflict with newer evidence, does the answer note the disagreement (without needing to resolve it fully)?',
+          description: ''
         }
       ]
     },
     {
       key: 'actionability',
-      title: 'Category 4: Actionability and Patient-Centeredness',
-      description: 'Evaluates whether the recommendation is a practical clinical tool that considers the patient\'s context',
+      title: 'Category 3: Actionability and Patient-Centeredness',
+      description: 'Evaluates whether the recommendation is a practical clinical tool that considers the patient\'s context.',
       questions: [
         {
           key: 'actionable_next_steps',
-          label: 'Actionable Next Steps',
-          description: 'Does the recommendation define clear, concrete, and immediate next steps for the clinical team to execute (e.g., "Perform ⁶⁸Ga-DOTATATE PET/CT," "Consult HPB surgery")?'
+          label: 'Actionable Next Steps: Does the recommendation define clear, concrete, and immediate next steps for the clinical team to execute (e.g., "Perform ⁶⁸Ga-DOTATATE PET/CT," "Consult HPB surgery")?',
+          description: ''
         },
         {
           key: 'personalization',
-          label: 'Personalization',
-          description: 'Does the plan tailor recommendations to patient-specific factors that go beyond standard diagnosis and stage (e.g., unique molecular markers, prior treatment history, significant comorbidities)?'
+          label: 'Personalization: Does the plan tailor recommendations to patient-specific factors that go beyond standard diagnosis and stage (e.g., unique molecular markers, prior treatment history, significant comorbidities)?',
+          description: ''
         },
         {
           key: 'quality_of_life',
-          label: 'Quality of Life Consideration',
-          description: 'Does the recommendation explicitly acknowledge or address how the proposed plan might impact the patient\'s quality of life?'
+          label: 'Quality of Life Consideration: Does the recommendation explicitly acknowledge or address how the proposed plan might impact the patient\'s quality of life?',
+          description: ''
         }
       ]
     }
@@ -143,12 +131,17 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
 
   const handleSubmit = async (values) => {
     try {
+      // Debug: log all values received from the form
+      console.log('Form values at submit:', values);
       // Collect detailed evaluation answers
       const detailedAnswers = {};
       evaluationCategories.forEach(category => {
         category.questions.forEach(question => {
-          if (values[question.key]) {
+          if (values[question.key] !== undefined) {
             detailedAnswers[question.key] = values[question.key];
+          } else {
+            // Debug: log missing question key
+            console.warn('Missing value for question:', question.key);
           }
         });
       });
@@ -159,6 +152,8 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
         comments: values.comments || '',
         ...detailedAnswers
       };
+
+      console.log('Evaluation data to submit:', evaluationData);
 
       await onSubmit(evaluationData);
       
@@ -259,6 +254,10 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
       <Form
         form={form}
         layout="vertical"
+        // Log values as they change to help debug validation issues
+        onValuesChange={(changedValues, allValues) => {
+          console.log('Form onValuesChange:', changedValues, allValues);
+        }}
         onFinish={handleSubmit}
         onFinishFailed={handleSubmitFailed}
         initialValues={{
@@ -323,11 +322,22 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
                   <Form.Item
                     key={question.key}
                     name={question.key}
-                    label={question.label}
-                    help={question.description}
+                    label={null}
                     rules={[{ required: true, message: `Please answer ${question.label}` }]}
                   >
-                    <Radio.Group>
+                    <div style={{ marginBottom: 4, fontWeight: 500 }}>
+                      {question.label}
+                    </div>
+                    <div style={{ marginBottom: 12, color: '#666', fontSize: 13 }}>
+                      {question.description}
+                    </div>
+                    <Radio.Group
+                      onChange={(e) => {
+                        // Ensure the form registers the change explicitly and log it
+                        console.log(`Radio change for ${question.key}:`, e.target.value);
+                        form.setFieldsValue({ [question.key]: e.target.value });
+                      }}
+                    >
                       {yesNoOptions.map(option => (
                         <Radio key={option.value} value={option.value}>
                           {option.label}
