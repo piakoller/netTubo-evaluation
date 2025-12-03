@@ -45,15 +45,63 @@ const PatientEvaluation = ({ userData }) => {
         const patientsMap = fetchedPatients || {};
         setPatients(patientsMap);
 
-        // build queues: baseline first then agentic
+        // DEBUG: Log patient data structure
+        console.log('=== PATIENT DATA DEBUG ===');
+        console.log('Total patients loaded:', Object.keys(patientsMap).length);
+        console.log('Patient IDs:', Object.keys(patientsMap));
+        
+        // Log each patient's data
+        Object.entries(patientsMap).forEach(([id, patient]) => {
+          console.log(`\nPatient ${id}:`, {
+            case_id: patient?.case_id,
+            has_baseline: !!patient?.baseline_recommendation,
+            has_agentic: !!patient?.recommendation,
+            has_expert: !!patient?.expert_recommendation,
+            baseline_source: patient?.baseline_recommendation?.source,
+            agentic_source: patient?.recommendation?.source
+          });
+        });
+        console.log('========================\n');
+
+        // build queues: randomize order of baseline and agentic per patient
+        // using patient index as seed for consistent ordering across sessions
         const queues = {};
-        Object.keys(patientsMap || {}).forEach((pid) => {
+        const sortedPatientIds = getSortedIds(patientsMap);
+        
+        sortedPatientIds.forEach((pid, index) => {
           const p = patientsMap[pid];
           const q = [];
-          if (p?.baseline_recommendation) q.push('baseline');
-          if (p?.recommendation) q.push('agentic');
+          
+          // Check if both recommendations exist
+          const hasBaseline = !!p?.baseline_recommendation;
+          const hasAgentic = !!p?.recommendation;
+          
+          if (hasBaseline && hasAgentic) {
+            // Randomize order based on patient index (even/odd)
+            // Even index: baseline first, Odd index: agentic first
+            if (index % 2 === 0) {
+              q.push('baseline');
+              q.push('agentic');
+            } else {
+              q.push('agentic');
+              q.push('baseline');
+            }
+          } else {
+            // If only one exists, add it
+            if (hasBaseline) q.push('baseline');
+            if (hasAgentic) q.push('agentic');
+          }
+          
           queues[pid] = q;
         });
+        
+        // DEBUG: Log the randomized queue order for each patient
+        console.log('=== RECOMMENDATION ORDER DEBUG ===');
+        sortedPatientIds.forEach((pid, index) => {
+          console.log(`Patient ${pid} (index ${index}):`, queues[pid].join(' → '));
+        });
+        console.log('==================================\n');
+        
         setRecommendationQueues(queues);
 
         // Load completed status from localStorage as fallback

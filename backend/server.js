@@ -82,6 +82,19 @@ let mongoBaselineConnection = null;
 const MONGODB_BASELINE_URI = process.env.MONGODB_BASELINE_URI;
 const BASELINE_DB_NAME = 'nettubo-baseline';
 
+// DEBUG: Log the output directory configuration
+console.log('=== DATA SOURCE CONFIGURATION ===');
+console.log('📊 Output Directory (BATCH_RESULTS_PATH):', BATCH_RESULTS_PATH);
+console.log('📊 Batch results directory exists:', fs.existsSync(BATCH_RESULTS_PATH) ? '✅' : '❌');
+console.log('📊 MongoDB Configuration:');
+console.log('  - Workflow URI:', MONGODB_WORKFLOW_URI ? '✅ Configured' : '❌ Not set');
+console.log('  - Baseline URI:', MONGODB_BASELINE_URI ? '✅ Configured' : '❌ Not set');
+console.log('📊 Environment variables:');
+console.log('  - BATCH_RESULTS_PATH:', process.env.BATCH_RESULTS_PATH || 'not set (using default)');
+console.log('  - BATCH_RESULTS_SECRET:', process.env.BATCH_RESULTS_SECRET || 'not set');
+console.log('📊 Data loading strategy: MongoDB primary, file fallback');
+console.log('=================================\n');
+
 async function connectToWorkflowDb() {
   if (!MONGODB_WORKFLOW_URI) {
     console.log('🔄 No MongoDB URI configured, using file-only workflow loading');
@@ -126,13 +139,13 @@ async function loadBaselineFromMongo(patientId) {
     const collectionName = `patient-${patientId}`;
     const collection = mongoBaselineDb.collection(collectionName);
     
-    // Find document with ChatGPT model
+    // Find document with Google Gemini 3.0 Pro model
     const doc = await collection.findOne({
-      "metadata.model": "openai/gpt-5"
+      "metadata.model": "google/gemini-3.0-pro"
     });
     
     if (!doc || !doc.output || !doc.output.response) {
-      console.log(`⚠️ No baseline recommendation found for patient ${patientId}`);
+      console.log(`⚠️ No baseline recommendation found for patient ${patientId} with model google/gemini-3.0-pro`);
       return null;
     }
     
@@ -141,7 +154,7 @@ async function loadBaselineFromMongo(patientId) {
     baselineResponse = baselineResponse.replace(/<[^>]*>/g, ''); // Remove XML tags
     baselineResponse = baselineResponse.trim(); // Remove extra whitespace
     
-    console.log(`✅ Loaded baseline recommendation for patient ${patientId}`);
+    console.log(`✅ Loaded baseline recommendation for patient ${patientId} (model: google/gemini-3.0-pro)`);
     return baselineResponse;
   } catch (error) {
     console.error(`❌ Error loading baseline for patient ${patientId}:`, error.message);
@@ -299,6 +312,10 @@ async function loadAllPatientData() {
     }
     
     console.log('Loading fresh patient data from MongoDB and workflow JSONs...');
+    console.log('Data sources:');
+    console.log('  - MongoDB Workflow DB:', mongoWorkflowDb ? 'Connected' : 'Not connected');
+    console.log('  - MongoDB Baseline DB:', mongoBaselineDb ? 'Connected' : 'Not connected');
+    console.log('  - File path:', BATCH_RESULTS_PATH);
     
     const patientData = {};
 
@@ -394,6 +411,16 @@ async function loadAllPatientData() {
 async function processWorkflowIntoPatientData(patientId, workflow) {
   try {
     console.log(`🔍 Processing workflow for patient ${patientId}, workflow exists: ${!!workflow}`);
+    
+    // Log workflow timestamp information
+    if (workflow) {
+      console.log(`⏰ Workflow timestamp info for patient ${patientId}:`);
+      console.log(`   - metadata.timestamp: ${workflow.metadata?.timestamp || 'not found'}`);
+      console.log(`   - timestamp: ${workflow.timestamp || 'not found'}`);
+      console.log(`   - created_at: ${workflow.created_at || 'not found'}`);
+      console.log(`   - recommendation_result.timestamp: ${workflow.recommendation_result?.timestamp || 'not found'}`);
+      console.log(`   - guidelines_result.timestamp: ${workflow.guidelines_result?.timestamp || 'not found'}`);
+    }
     
     let clinicalInfo = undefined;
     let clinicalQuestion = undefined;
