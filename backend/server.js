@@ -149,13 +149,20 @@ async function loadBaselineFromMongo(patientId) {
       return null;
     }
     
-    // Clean XML tags and format the response
+    // Get the full response and normalize it
     let baselineResponse = doc.output.response;
-    baselineResponse = baselineResponse.replace(/<[^>]*>/g, ''); // Remove XML tags
-    baselineResponse = baselineResponse.trim(); // Remove extra whitespace
+    baselineResponse = normalizeMarkdownText(baselineResponse);
+    baselineResponse = baselineResponse.trim();
     
     console.log(`✅ Loaded baseline recommendation for patient ${patientId} (model: google/gemini-3.0-pro)`);
-    return baselineResponse;
+    console.log(`   Response length: ${baselineResponse.length} characters`);
+    
+    // Return in the same format as agentic recommendations
+    return {
+      raw_response: baselineResponse,
+      source: 'mongodb_baseline',
+      model: 'google/gemini-3.0-pro'
+    };
   } catch (error) {
     console.error(`❌ Error loading baseline for patient ${patientId}:`, error.message);
     return null;
