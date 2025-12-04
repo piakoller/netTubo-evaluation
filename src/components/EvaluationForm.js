@@ -179,7 +179,8 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
         setShowExpertModal(true);
       }
       
-      form.resetFields();
+      // Don't reset form - allow users to update their evaluation
+      // form.resetFields();
     } catch (error) {
       console.error('Error submitting evaluation:', error);
     }
@@ -388,8 +389,11 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
             loading={loading}
             style={{ minWidth: '200px' }}
           >
-            Submit Evaluation
+            Submit / Update Evaluation
           </Button>
+          <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
+            You can update your evaluation at any time using the navigation buttons above
+          </div>
         </Form.Item>
       </Form>
 

@@ -28,6 +28,7 @@ const PatientEvaluation = ({ userData }) => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [recommendationQueues, setRecommendationQueues] = useState({});
+  const [currentRecommendationIndex, setCurrentRecommendationIndex] = useState(0);
   const [completedEvaluations, setCompletedEvaluations] = useState(new Set());
   const [studyCompleted, setStudyCompleted] = useState(false);
   // Track a patient that is awaiting expert-evaluation so we keep the form mounted
@@ -131,6 +132,7 @@ const PatientEvaluation = ({ userData }) => {
       if (pendingExpertPatientId !== selectedPatientId) {
         setSelectedPatientId(pendingExpertPatientId);
         setSelectedPatient(patients[pendingExpertPatientId]);
+        setCurrentRecommendationIndex(0); // Reset to first recommendation
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
       return;
@@ -142,27 +144,33 @@ const PatientEvaluation = ({ userData }) => {
     if (next && next !== selectedPatientId) {
       setSelectedPatientId(next);
       setSelectedPatient(patients[next]);
+      setCurrentRecommendationIndex(0); // Reset to first recommendation
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // Check if study is complete
-    const anyRemaining = Object.keys(recommendationQueues).some((id) => (recommendationQueues[id] || []).length > 0 && !completedEvaluations.has(id));
-    if (!anyRemaining && Object.keys(patients).length > 0) {
-      setStudyCompleted(true);
-    }
-  }, [patients, recommendationQueues, completedEvaluations, selectedPatientId, loading]);
+    // Check if study is complete (all patients have been evaluated)
+    // For now, we'll keep the study open so users can go back
+    // const anyRemaining = Object.keys(recommendationQueues).some((id) => (recommendationQueues[id] || []).length > 0 && !completedEvaluations.has(id));
+    // if (!anyRemaining && Object.keys(patients).length > 0) {
+    //   setStudyCompleted(true);
+    // }
+  }, [patients, recommendationQueues, completedEvaluations, selectedPatientId, loading, pendingExpertPatientId]);
 
   // --- Derived State ---
   // Get the current recommendation object (type + data) for the selected patient
   const getCurrentRecommendation = useCallback(() => {
     if (!selectedPatientId || !selectedPatient) return null;
     const q = recommendationQueues[selectedPatientId] || [];
-    const t = q.length > 0 ? q[0] : null;
+    const t = q[currentRecommendationIndex];
     if (!t) return null;
     return t === 'baseline' ? { type: 'baseline', data: selectedPatient.baseline_recommendation } : { type: 'agentic', data: selectedPatient.recommendation };
-  }, [recommendationQueues, selectedPatient, selectedPatientId]);
+  }, [recommendationQueues, selectedPatient, selectedPatientId, currentRecommendationIndex]);
 
   const currentRecommendation = getCurrentRecommendation();
+  
+  const getCurrentRecommendationIndex = useCallback(() => {
+    return currentRecommendationIndex;
+  }, [currentRecommendationIndex]);
 
   // --- Effect: Auto-open expert modal when needed ---
   useEffect(() => {
@@ -196,8 +204,24 @@ const PatientEvaluation = ({ userData }) => {
   const handlePatientSelect = useCallback((patientId) => {
     setSelectedPatientId(patientId);
     setSelectedPatient(patients[patientId]);
+    setCurrentRecommendationIndex(0); // Reset to first recommendation when changing patients
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [patients]);
+
+  const handleNextRecommendation = useCallback(() => {
+    const q = recommendationQueues[selectedPatientId] || [];
+    if (currentRecommendationIndex < q.length - 1) {
+      setCurrentRecommendationIndex(currentRecommendationIndex + 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [currentRecommendationIndex, recommendationQueues, selectedPatientId]);
+
+  const handlePreviousRecommendation = useCallback(() => {
+    if (currentRecommendationIndex > 0) {
+      setCurrentRecommendationIndex(currentRecommendationIndex - 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [currentRecommendationIndex]);
 
   // Merged the two duplicate functions from the original file
   const handleEvaluationSubmit = useCallback(async (evaluationData) => {
@@ -212,42 +236,25 @@ const PatientEvaluation = ({ userData }) => {
         ...evaluationData
       };
       await dataService.saveEvaluation(evaluation);
-      message.success('Evaluation submitted');
+      message.success('Evaluation submitted successfully! You can update it anytime.');
 
-      // compute updated queue synchronously
-      const newQueues = { ...recommendationQueues };
-      const q = Array.isArray(newQueues[selectedPatientId]) ? [...newQueues[selectedPatientId]] : [];
-      q.shift(); // Remove the item that was just evaluated
-      newQueues[selectedPatientId] = q;
-      setRecommendationQueues(newQueues);
-
-      // if queue now empty, persist completed flag
-      if (!q || q.length === 0) {
-        // If there is an expert recommendation, defer marking completed
-        // until the expert evaluation has been submitted. This avoids
-        // unmounting the EvaluationForm (which holds the expert modal)
-        // before the modal can be shown.
-        if (selectedPatient?.expert_recommendation) {
-          // mark this patient as pending expert evaluation so we keep it selected
-          setPendingExpertPatientId(selectedPatientId);
-          // ensure the selectedPatient stays in state (no-op if already set)
-          setSelectedPatient(patients[selectedPatientId]);
-        } else {
-          await saveCompletedEvaluation(selectedPatientId);
-        }
-        // Otherwise: leave the patient selected and wait for expert evaluation
-      } else {
-        // keep same patient selected so that evaluationType changes and form re-renders
-        // (key uses recommendation type)
-        setSelectedPatient(patients[selectedPatientId]);
+      // DO NOT shift queue - allow users to go back and update
+      // Just show expert modal if this was the last recommendation
+      const q = recommendationQueues[selectedPatientId] || [];
+      const currentIndex = getCurrentRecommendationIndex();
+      
+      // If this is the last recommendation and there's an expert recommendation, show modal
+      if (currentIndex === q.length - 1 && selectedPatient?.expert_recommendation) {
+        setPendingExpertPatientId(selectedPatientId);
       }
+      
     } catch (err) {
       console.error('Error saving evaluation', err);
       message.error('Failed to save evaluation');
     } finally {
       setSubmitting(false);
     }
-  }, [selectedPatientId, userData, currentRecommendation, recommendationQueues, patients, saveCompletedEvaluation]);
+  }, [selectedPatientId, userData, currentRecommendation, recommendationQueues, patients, selectedPatient]);
 
   const handleExpertEvaluationSubmit = useCallback(async (expertEvaluationData) => {
     if (!selectedPatientId) return;
@@ -338,6 +345,28 @@ const PatientEvaluation = ({ userData }) => {
       )}
 
       <Card>
+        {/* Navigation for multiple recommendations */}
+        {selectedPatient && (recommendationQueues[selectedPatientId] || []).length > 1 && (
+          <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Button 
+              onClick={handlePreviousRecommendation}
+              disabled={currentRecommendationIndex === 0}
+            >
+              ← Previous Recommendation
+            </Button>
+            <Text strong>
+              Recommendation {currentRecommendationIndex + 1} of {(recommendationQueues[selectedPatientId] || []).length}
+              {currentRecommendation && ` (${currentRecommendation.type === 'baseline' ? 'Baseline' : 'Agentic'} AI)`}
+            </Text>
+            <Button 
+              onClick={handleNextRecommendation}
+              disabled={currentRecommendationIndex >= (recommendationQueues[selectedPatientId] || []).length - 1}
+            >
+              Next Recommendation →
+            </Button>
+          </div>
+        )}
+        
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={12}>
             <Title level={2}><MedicineBoxOutlined style={{ marginRight: 8 }} />Recommendation</Title>
@@ -356,7 +385,7 @@ const PatientEvaluation = ({ userData }) => {
             <Title level={2}><CheckCircleOutlined style={{ marginRight: 8 }} />Evaluation</Title>
             {selectedPatient ? (
               <EvaluationForm
-                key={`${selectedPatientId}-${pendingExpertPatientId === selectedPatientId ? 'expert' : (currentRecommendation?.type || 'none')}`}
+                key={`${selectedPatientId}-${currentRecommendationIndex}-${currentRecommendation?.type || 'none'}`}
                 onSubmit={handleEvaluationSubmit}
                 onExpertSubmit={handleExpertEvaluationSubmit}
                 loading={submitting}
