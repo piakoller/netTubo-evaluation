@@ -29,6 +29,7 @@ const PatientEvaluation = ({ userData }) => {
   const [submitting, setSubmitting] = useState(false);
   const [recommendationQueues, setRecommendationQueues] = useState({});
   const [currentRecommendationIndex, setCurrentRecommendationIndex] = useState(0);
+  const [savedEvaluation, setSavedEvaluation] = useState(null);
   const [completedEvaluations, setCompletedEvaluations] = useState(new Set());
   const [studyCompleted, setStudyCompleted] = useState(false);
   // Track a patient that is awaiting expert-evaluation so we keep the form mounted
@@ -172,6 +173,30 @@ const PatientEvaluation = ({ userData }) => {
     return currentRecommendationIndex;
   }, [currentRecommendationIndex]);
 
+  // --- Effect: Load saved evaluation when recommendation changes ---
+  useEffect(() => {
+    const loadSavedEvaluation = async () => {
+      if (!selectedPatientId || !currentRecommendation || !userData?.userId) {
+        setSavedEvaluation(null);
+        return;
+      }
+
+      try {
+        const evaluation = await dataService.getEvaluationForPatientAndType(
+          userData.userId,
+          selectedPatientId,
+          currentRecommendation.type
+        );
+        setSavedEvaluation(evaluation);
+      } catch (error) {
+        console.error('Error loading saved evaluation:', error);
+        setSavedEvaluation(null);
+      }
+    };
+
+    loadSavedEvaluation();
+  }, [selectedPatientId, currentRecommendation, userData?.userId, currentRecommendationIndex]);
+
   // --- Effect: Auto-open expert modal when needed ---
   useEffect(() => {
     if (
@@ -237,6 +262,14 @@ const PatientEvaluation = ({ userData }) => {
       };
       await dataService.saveEvaluation(evaluation);
       message.success('Evaluation submitted successfully! You can update it anytime.');
+
+      // Refresh the saved evaluation to show updated data
+      const savedEval = await dataService.getEvaluationForPatientAndType(
+        userData.userId,
+        selectedPatientId,
+        currentRecommendation.type
+      );
+      setSavedEvaluation(savedEval);
 
       // DO NOT shift queue - allow users to go back and update
       // Just show expert modal if this was the last recommendation
@@ -356,11 +389,14 @@ const PatientEvaluation = ({ userData }) => {
             </Button>
             <Text strong>
               Recommendation {currentRecommendationIndex + 1} of {(recommendationQueues[selectedPatientId] || []).length}
-              {currentRecommendation && ` (${currentRecommendation.type === 'baseline' ? 'Baseline' : 'Agentic'} AI)`}
             </Text>
             <Button 
               onClick={handleNextRecommendation}
-              disabled={currentRecommendationIndex >= (recommendationQueues[selectedPatientId] || []).length - 1}
+              disabled={
+                currentRecommendationIndex >= (recommendationQueues[selectedPatientId] || []).length - 1 ||
+                !savedEvaluation
+              }
+              title={!savedEvaluation ? 'Please complete the current evaluation before proceeding' : ''}
             >
               Next Recommendation →
             </Button>
@@ -392,6 +428,7 @@ const PatientEvaluation = ({ userData }) => {
                 expertRecommendation={selectedPatient.expert_recommendation}
                 recommendationType={currentRecommendation?.type}
                 expertModalTriggerRef={expertModalTriggerRef}
+                savedEvaluation={savedEvaluation}
               />
             ) : (
               <Card><p>Select a patient to begin evaluation.</p></Card>

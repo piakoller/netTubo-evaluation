@@ -228,6 +228,37 @@ class DataService {
     }
   }
 
+  async getEvaluationForPatientAndType(userId, patientId, recommendationType) {
+    try {
+      const response = await fetch(`${this.baseURL}/evaluations/user/${userId}/patient/${patientId}/type/${recommendationType}`);
+      
+      if (response.ok) {
+        const result = await response.json();
+        return result.evaluation || null;
+      } else if (response.status === 404) {
+        return null; // No evaluation found
+      } else {
+        throw new Error('Database query failed');
+      }
+    } catch (error) {
+      console.warn('Could not load evaluation from database, checking localStorage:', error.message);
+      
+      // Fallback to localStorage
+      try {
+        const evaluations = JSON.parse(localStorage.getItem('evaluations') || '[]');
+        const evaluation = evaluations.find(e => 
+          e.user_data?.userId === userId && 
+          e.patient_id === patientId && 
+          e.recommendation_type === recommendationType
+        );
+        return evaluation || null;
+      } catch (error) {
+        console.error('Error loading evaluation:', error);
+        return null;
+      }
+    }
+  }
+
   async getEvaluationStats() {
     const evaluations = await this.loadEvaluations();
     

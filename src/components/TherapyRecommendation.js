@@ -13,7 +13,7 @@ const PublicationsCard = ({ mentionedNCTs = [], nctPublicationMap = {} }) => {
     .filter(item => item.publications.length > 0);
   if (pubs.length === 0) return null;
   return (
-    <Card style={{ marginTop: 16, marginBottom: 16 }} title={<span><MedicineBoxOutlined /> Publications Used for  Agentic AI Recommendation</span>}>
+    <Card style={{ marginTop: 16, marginBottom: 16 }} title={<span><MedicineBoxOutlined /> Publications Used for AI Recommendation</span>}>
       <ul style={{ paddingLeft: 20 }}>
         {pubs.map(({ nct, publications }) => (
           <li key={nct}>

@@ -17,7 +17,7 @@ import { MedicineBoxOutlined } from '@ant-design/icons';
 const { TextArea } = Input;
 const { Text, Title } = Typography;
 
-const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendation, expertModalTriggerRef }) => {
+const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendation, expertModalTriggerRef, savedEvaluation }) => {
   const [form] = Form.useForm();
   const [expertForm] = Form.useForm();
   const [showExpertModal, setShowExpertModal] = useState(false);
@@ -29,6 +29,38 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
     }
   }, [expertModalTriggerRef]);
   const [expertEvaluationSubmitted, setExpertEvaluationSubmitted] = useState(false);
+
+  // Load saved evaluation data into form
+  React.useEffect(() => {
+    if (savedEvaluation) {
+      console.log('Loading saved evaluation into form:', savedEvaluation);
+      const formValues = {
+        overall_rating: savedEvaluation.overallRating || savedEvaluation.overall_rating || 5,
+        implementation_willingness: savedEvaluation.implementationWillingness || savedEvaluation.implementation_willingness,
+        comments: savedEvaluation.comments || '',
+        // Category 1: Evidence Retrieval
+        guideline_found: savedEvaluation.guideline_found,
+        cites_primary_study: savedEvaluation.cites_primary_study,
+        acknowledges_new_data: savedEvaluation.acknowledges_new_data,
+        citations_real: savedEvaluation.citations_real,
+        // Category 2: Clinical Soundness
+        clinical_appropriateness: savedEvaluation.clinical_appropriateness,
+        contraindication_awareness: savedEvaluation.contraindication_awareness,
+        treatment_completeness: savedEvaluation.treatment_completeness,
+        notes_guideline_evidence_conflict: savedEvaluation.notes_guideline_evidence_conflict,
+        // Category 3: Actionability
+        actionable_next_steps: savedEvaluation.actionable_next_steps,
+        personalization: savedEvaluation.personalization,
+        quality_of_life: savedEvaluation.quality_of_life
+      };
+      form.setFieldsValue(formValues);
+    } else {
+      // Reset to default values when no saved evaluation
+      form.setFieldsValue({
+        overall_rating: 5
+      });
+    }
+  }, [savedEvaluation, form]);
 
   // Yes/No options for detailed evaluation
   const yesNoOptions = [
@@ -382,6 +414,22 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
         </Form.Item>
 
         <Form.Item style={{ marginTop: '32px', textAlign: 'center' }}>
+          {savedEvaluation && (
+            <div style={{ 
+              marginBottom: '16px', 
+              padding: '12px', 
+              backgroundColor: '#e6f7ff', 
+              border: '1px solid #91d5ff',
+              borderRadius: '4px'
+            }}>
+              <Text style={{ color: '#0050b3', fontWeight: 'bold' }}>
+                ✓ Previously evaluated on {new Date(savedEvaluation.timestamp).toLocaleString()}
+              </Text>
+              <div style={{ fontSize: '12px', color: '#096dd9', marginTop: '4px' }}>
+                You can update your evaluation below
+              </div>
+            </div>
+          )}
           <Button 
             type="primary" 
             htmlType="submit" 
@@ -389,10 +437,12 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
             loading={loading}
             style={{ minWidth: '200px' }}
           >
-            Submit / Update Evaluation
+            {savedEvaluation ? 'Update Evaluation' : 'Submit Evaluation'}
           </Button>
           <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
-            You can update your evaluation at any time using the navigation buttons above
+            {savedEvaluation 
+              ? 'Your changes will update the previous evaluation' 
+              : 'You can update your evaluation at any time using the navigation buttons above'}
           </div>
         </Form.Item>
       </Form>
