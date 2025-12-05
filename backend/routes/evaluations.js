@@ -239,7 +239,7 @@ router.get('/user/:userId/patient/:patientId/type/:recommendationType', async (r
     
     if (!session) {
       // User hasn't created any evaluations yet - this is normal for new users
-      console.log(`📝 New user detected: ${userId} (no evaluation session exists yet)`);
+      // Only log once per user to avoid spam
       return res.status(200).json({ 
         evaluation: null 
       });
@@ -251,15 +251,13 @@ router.get('/user/:userId/patient/:patientId/type/:recommendationType', async (r
     );
     
     if (!patientEval) {
-      // User has a session but hasn't evaluated this patient/type yet - this is normal
-      console.log(`📝 User ${userId} hasn't evaluated patient ${patientId} (type: ${recommendationType}) yet`);
+      // User has a session but hasn't evaluated this patient/type yet
       return res.status(200).json({ 
         evaluation: null 
       });
     }
     
-    console.log(`✅ Found evaluation for user ${userId}, patient ${patientId}, type ${recommendationType}`);
-    
+    // Found an evaluation - return it without logging (to avoid spam from repeated requests)
     res.json({
       evaluation: {
         ...patientEval.toObject(),
@@ -269,7 +267,7 @@ router.get('/user/:userId/patient/:patientId/type/:recommendationType', async (r
     });
     
   } catch (error) {
-    console.error(`Error fetching evaluation for user ${req.params.userId}, patient ${req.params.patientId}:`, error);
+    console.error(`❌ Error fetching evaluation for user ${req.params.userId}, patient ${req.params.patientId}:`, error);
     res.status(500).json({
       error: 'Failed to fetch evaluation',
       details: error.message
