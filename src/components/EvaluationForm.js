@@ -33,7 +33,7 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
   // Load saved evaluation data into form
   React.useEffect(() => {
     if (savedEvaluation) {
-      console.log('Loading saved evaluation into form:', savedEvaluation);
+      // Removed verbose logging to avoid console spam during re-renders
       const formValues = {
         overall_rating: savedEvaluation.overallRating || savedEvaluation.overall_rating || 5,
         implementation_willingness: savedEvaluation.implementationWillingness || savedEvaluation.implementation_willingness,

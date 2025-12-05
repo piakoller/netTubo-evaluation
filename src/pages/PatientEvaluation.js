@@ -261,7 +261,7 @@ const PatientEvaluation = ({ userData }) => {
         ...evaluationData
       };
       await dataService.saveEvaluation(evaluation);
-      message.success('Evaluation submitted successfully! You can update it anytime.');
+      message.success('Evaluation submitted successfully!');
 
       // Refresh the saved evaluation to show updated data
       const savedEval = await dataService.getEvaluationForPatientAndType(
@@ -271,14 +271,22 @@ const PatientEvaluation = ({ userData }) => {
       );
       setSavedEvaluation(savedEval);
 
-      // DO NOT shift queue - allow users to go back and update
-      // Just show expert modal if this was the last recommendation
       const q = recommendationQueues[selectedPatientId] || [];
       const currentIndex = getCurrentRecommendationIndex();
       
-      // If this is the last recommendation and there's an expert recommendation, show modal
-      if (currentIndex === q.length - 1 && selectedPatient?.expert_recommendation) {
-        setPendingExpertPatientId(selectedPatientId);
+      // Check if this is the last recommendation in the queue
+      if (currentIndex === q.length - 1) {
+        // If there's an expert recommendation, show modal
+        if (selectedPatient?.expert_recommendation) {
+          setPendingExpertPatientId(selectedPatientId);
+        } else {
+          // No expert evaluation needed, mark patient as completed and move to next
+          await saveCompletedEvaluation(selectedPatientId);
+        }
+      } else {
+        // Not the last recommendation, automatically advance to next
+        setCurrentRecommendationIndex(currentIndex + 1);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
       
     } catch (err) {
@@ -287,7 +295,7 @@ const PatientEvaluation = ({ userData }) => {
     } finally {
       setSubmitting(false);
     }
-  }, [selectedPatientId, userData, currentRecommendation, recommendationQueues, patients, selectedPatient]);
+  }, [selectedPatientId, userData, currentRecommendation, recommendationQueues, selectedPatient, getCurrentRecommendationIndex, saveCompletedEvaluation]);
 
   const handleExpertEvaluationSubmit = useCallback(async (expertEvaluationData) => {
     if (!selectedPatientId) return;

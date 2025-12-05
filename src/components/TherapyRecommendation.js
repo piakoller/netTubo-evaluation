@@ -138,12 +138,7 @@ const TherapyRecommendation = ({ recommendation, trialData = [], recommendationT
     if (trial.nct_id && trial.url) nctUrlMap[trial.nct_id] = trial.url;
   });
 
-  console.log('TherapyRecommendation props:', {
-    recommendationType,
-    trialDataCount: trialData?.length || 0,
-    nctUrlMapKeys: Object.keys(nctUrlMap),
-    recommendationExists: !!recommendation
-  });
+  // Removed verbose logging to avoid console spam during re-renders
 
   // The recommendation object is now passed directly
   const recommendationObj = recommendation 
