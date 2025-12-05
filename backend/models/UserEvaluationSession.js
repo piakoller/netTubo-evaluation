@@ -158,4 +158,4 @@ userEvaluationSessionSchema.methods.getExpertEvaluations = function() {
 userEvaluationSessionSchema.index({ 'patientEvaluations.patientId': 1 });
 userEvaluationSessionSchema.index({ createdAt: -1 });
 
-module.exports = mongoose.model('UserEvaluationSession', userEvaluationSessionSchema, 'evaluations');
+module.exports = mongoose.model('UserEvaluationSession', userEvaluationSessionSchema, 'user_evaluation_sessions');
