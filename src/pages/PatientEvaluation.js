@@ -240,6 +240,7 @@ const PatientEvaluation = ({ userData }) => {
     if (currentRecommendationIndex < q.length - 1) {
       // Move to next recommendation within current patient
       setCurrentRecommendationIndex(currentRecommendationIndex + 1);
+      setSavedEvaluation(null); // Reset saved evaluation to trigger reload
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       // Move to first recommendation of next patient
@@ -250,6 +251,7 @@ const PatientEvaluation = ({ userData }) => {
         setSelectedPatientId(nextPatientId);
         setSelectedPatient(patients[nextPatientId]);
         setCurrentRecommendationIndex(0);
+        setSavedEvaluation(null); // Reset saved evaluation to trigger reload
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     }
@@ -259,6 +261,7 @@ const PatientEvaluation = ({ userData }) => {
     if (currentRecommendationIndex > 0) {
       // Move to previous recommendation within current patient
       setCurrentRecommendationIndex(currentRecommendationIndex - 1);
+      setSavedEvaluation(null); // Reset saved evaluation to trigger reload
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       // Move to last recommendation of previous patient
@@ -270,6 +273,7 @@ const PatientEvaluation = ({ userData }) => {
         setSelectedPatientId(prevPatientId);
         setSelectedPatient(patients[prevPatientId]);
         setCurrentRecommendationIndex(Math.max(0, prevQueue.length - 1));
+        setSavedEvaluation(null); // Reset saved evaluation to trigger reload
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     }
