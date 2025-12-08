@@ -37,6 +37,8 @@ const PatientEvaluation = ({ userData }) => {
   const [pendingExpertPatientId, setPendingExpertPatientId] = useState(null);
   // Ref to trigger expert modal in EvaluationForm
   const expertModalTriggerRef = useRef(null);
+  // Track if patient was manually selected to prevent auto-select from overriding
+  const [manuallySelected, setManuallySelected] = useState(false);
 
   // --- Data Loading Effect ---
   // Load patients from dataService and build recommendation queues (baseline then agentic)
@@ -129,6 +131,12 @@ const PatientEvaluation = ({ userData }) => {
   // This logic was floating in the original file
   useEffect(() => {
     if (loading || Object.keys(patients).length === 0) return; // Don't run until loaded
+    
+    // Don't auto-select if user manually selected a patient
+    if (manuallySelected) {
+      return;
+    }
+    
     // If an expert evaluation is pending for a patient, keep that patient selected
     if (pendingExpertPatientId) {
       if (pendingExpertPatientId !== selectedPatientId) {
@@ -156,7 +164,7 @@ const PatientEvaluation = ({ userData }) => {
     // if (!anyRemaining && Object.keys(patients).length > 0) {
     //   setStudyCompleted(true);
     // }
-  }, [patients, recommendationQueues, completedEvaluations, selectedPatientId, loading, pendingExpertPatientId]);
+  }, [patients, recommendationQueues, completedEvaluations, selectedPatientId, loading, pendingExpertPatientId, manuallySelected]);
 
   // --- Derived State ---
   // Get the current recommendation object (type + data) for the selected patient
@@ -416,6 +424,7 @@ const PatientEvaluation = ({ userData }) => {
             <Select
               value={selectedPatientId}
               onChange={(patientId) => {
+                setManuallySelected(true); // Mark as manually selected
                 setSelectedPatientId(patientId);
                 setSelectedPatient(patients[patientId]);
                 setCurrentRecommendationIndex(0);
