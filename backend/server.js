@@ -329,10 +329,15 @@ async function loadAllPatientData() {
     // First, discover patients from MongoDB collections
     if (mongoWorkflowDb) {
       try {
-        // Try known patient collections: patient-1, patient-2, patient-3
-        const knownPatientIds = ['1', '2', '3'];
+        // Dynamically discover all patient collections (patient-1, patient-2, etc.)
+        const collections = await mongoWorkflowDb.listCollections().toArray();
+        const patientCollections = collections
+          .filter(c => c.name.startsWith('patient-'))
+          .map(c => c.name.replace('patient-', ''));
         
-        for (const patientId of knownPatientIds) {
+        console.log(`📊 Found ${patientCollections.length} patient collections in MongoDB:`, patientCollections);
+        
+        for (const patientId of patientCollections) {
           if (patientData[patientId]) continue; // Skip if already processed
           
           const workflow = await loadWorkflowForPatient(patientId);
@@ -345,7 +350,7 @@ async function loadAllPatientData() {
           }
         }
         
-        console.log(`📊 Attempted to load ${knownPatientIds.length} known patient collections from MongoDB`);
+        console.log(`📊 Attempted to load ${patientCollections.length} patient collections from MongoDB`);
       } catch (mongoError) {
         console.error('❌ Error loading patients from MongoDB:', mongoError.message);
         console.log('🔄 Continuing with file-based discovery...');
