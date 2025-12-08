@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Typography, Row, Col, message, Progress, Button } from 'antd';
+import { Card, Typography, Row, Col, message, Progress, Button, Select } from 'antd';
 import { MedicineBoxOutlined, CheckCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import PatientInfo from '../components/PatientInfo';
 import EvaluationForm from '../components/EvaluationForm';
@@ -8,6 +8,7 @@ import dataService from '../services/dataService';
 import TherapyRecommendation from '../components/TherapyRecommendation';
 
 const { Title, Text } = Typography;
+const { Option } = Select;
 
 // Helper function (assuming sorting by case_id or similar)
 // Moved outside the component to avoid being part of its definition
@@ -404,11 +405,32 @@ const PatientEvaluation = ({ userData }) => {
   return (
     <div style={{ maxWidth: '1600px', margin: '0 auto' }}>
       <Card style={{ marginBottom: 16 }}>
-        <Row justify="space-between" align="middle">
+        <Row justify="space-between" align="middle" gutter={[16, 16]}>
           <Col>
             <Text strong>Participant: </Text>
             <Text>{userData?.userId}</Text>
             <Text style={{ marginLeft: 16 }}>{userData?.profession} | {userData?.yearsExperience} years experience</Text>
+          </Col>
+          <Col>
+            <Text strong style={{ marginRight: 8 }}>Select Patient:</Text>
+            <Select
+              value={selectedPatientId}
+              onChange={(patientId) => {
+                setSelectedPatientId(patientId);
+                setSelectedPatient(patients[patientId]);
+                setCurrentRecommendationIndex(0);
+                setSavedEvaluation(null);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              style={{ width: 150 }}
+            >
+              {getSortedIds(patients).map(patientId => (
+                <Option key={patientId} value={patientId}>
+                  Patient {patientId}
+                  {completedEvaluations.has(patientId) && ' ✓'}
+                </Option>
+              ))}
+            </Select>
           </Col>
           <Col>
             <Text strong>Progress: </Text>
