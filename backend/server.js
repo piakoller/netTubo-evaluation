@@ -327,10 +327,10 @@ async function loadAllPatientData() {
     const patientData = {};
 
     // First, discover patients from MongoDB collections
-    if (mongoWorkflowDb) {
+    if (mongoWorkflowDb && mongoWorkflowConnection) {
       try {
         // Dynamically discover all patient collections (patient-1, patient-2, etc.)
-        const collections = await mongoWorkflowDb.listCollections().toArray();
+        const collections = await mongoWorkflowConnection.db.listCollections().toArray();
         const patientCollections = collections
           .filter(c => c.name.startsWith('patient-'))
           .map(c => c.name.replace('patient-', ''));
