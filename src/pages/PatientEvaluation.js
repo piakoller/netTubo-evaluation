@@ -238,17 +238,42 @@ const PatientEvaluation = ({ userData }) => {
   const handleNextRecommendation = useCallback(() => {
     const q = recommendationQueues[selectedPatientId] || [];
     if (currentRecommendationIndex < q.length - 1) {
+      // Move to next recommendation within current patient
       setCurrentRecommendationIndex(currentRecommendationIndex + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      // Move to first recommendation of next patient
+      const sortedIds = getSortedIds(patients);
+      const currentIdx = sortedIds.indexOf(selectedPatientId);
+      if (currentIdx < sortedIds.length - 1) {
+        const nextPatientId = sortedIds[currentIdx + 1];
+        setSelectedPatientId(nextPatientId);
+        setSelectedPatient(patients[nextPatientId]);
+        setCurrentRecommendationIndex(0);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     }
-  }, [currentRecommendationIndex, recommendationQueues, selectedPatientId]);
+  }, [currentRecommendationIndex, recommendationQueues, selectedPatientId, patients]);
 
   const handlePreviousRecommendation = useCallback(() => {
     if (currentRecommendationIndex > 0) {
+      // Move to previous recommendation within current patient
       setCurrentRecommendationIndex(currentRecommendationIndex - 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      // Move to last recommendation of previous patient
+      const sortedIds = getSortedIds(patients);
+      const currentIdx = sortedIds.indexOf(selectedPatientId);
+      if (currentIdx > 0) {
+        const prevPatientId = sortedIds[currentIdx - 1];
+        const prevQueue = recommendationQueues[prevPatientId] || [];
+        setSelectedPatientId(prevPatientId);
+        setSelectedPatient(patients[prevPatientId]);
+        setCurrentRecommendationIndex(Math.max(0, prevQueue.length - 1));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     }
-  }, [currentRecommendationIndex]);
+  }, [currentRecommendationIndex, recommendationQueues, selectedPatientId, patients]);
 
   // Merged the two duplicate functions from the original file
   const handleEvaluationSubmit = useCallback(async (evaluationData) => {
@@ -389,26 +414,40 @@ const PatientEvaluation = ({ userData }) => {
 
       <Card>
         {/* Navigation for multiple recommendations */}
-        {selectedPatient && (recommendationQueues[selectedPatientId] || []).length > 1 && (
+        {selectedPatient && (
           <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Button 
               onClick={handlePreviousRecommendation}
-              disabled={currentRecommendationIndex === 0}
+              disabled={
+                currentRecommendationIndex === 0 && 
+                getSortedIds(patients).indexOf(selectedPatientId) === 0
+              }
+              title={
+                currentRecommendationIndex === 0 && getSortedIds(patients).indexOf(selectedPatientId) === 0
+                  ? 'This is the first recommendation'
+                  : 'Go to previous recommendation (or previous patient)'
+              }
             >
-              ← Previous Recommendation
+              ← Previous
             </Button>
             <Text strong>
+              Patient {getSortedIds(patients).indexOf(selectedPatientId) + 1} of {Object.keys(patients).length} | 
               Recommendation {currentRecommendationIndex + 1} of {(recommendationQueues[selectedPatientId] || []).length}
             </Text>
             <Button 
               onClick={handleNextRecommendation}
               disabled={
-                currentRecommendationIndex >= (recommendationQueues[selectedPatientId] || []).length - 1 ||
-                !savedEvaluation
+                currentRecommendationIndex >= (recommendationQueues[selectedPatientId] || []).length - 1 &&
+                getSortedIds(patients).indexOf(selectedPatientId) === Object.keys(patients).length - 1
               }
-              title={!savedEvaluation ? 'Please complete the current evaluation before proceeding' : ''}
+              title={
+                currentRecommendationIndex >= (recommendationQueues[selectedPatientId] || []).length - 1 &&
+                getSortedIds(patients).indexOf(selectedPatientId) === Object.keys(patients).length - 1
+                  ? 'This is the last recommendation'
+                  : 'Go to next recommendation (or next patient)'
+              }
             >
-              Next Recommendation →
+              Next →
             </Button>
           </div>
         )}
