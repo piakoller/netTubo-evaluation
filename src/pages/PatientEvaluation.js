@@ -237,8 +237,11 @@ const PatientEvaluation = ({ userData }) => {
 
   const handleNextRecommendation = useCallback(() => {
     const q = recommendationQueues[selectedPatientId] || [];
+    console.log('Next clicked:', { currentRecommendationIndex, queueLength: q.length, selectedPatientId });
+    
     if (currentRecommendationIndex < q.length - 1) {
       // Move to next recommendation within current patient
+      console.log('Moving to next recommendation within patient');
       setCurrentRecommendationIndex(currentRecommendationIndex + 1);
       setSavedEvaluation(null); // Reset saved evaluation to trigger reload
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -246,13 +249,18 @@ const PatientEvaluation = ({ userData }) => {
       // Move to first recommendation of next patient
       const sortedIds = getSortedIds(patients);
       const currentIdx = sortedIds.indexOf(selectedPatientId);
-      if (currentIdx < sortedIds.length - 1) {
+      console.log('Moving to next patient:', { currentIdx, totalPatients: sortedIds.length, sortedIds });
+      
+      if (currentIdx >= 0 && currentIdx < sortedIds.length - 1) {
         const nextPatientId = sortedIds[currentIdx + 1];
+        console.log('Switching to patient:', nextPatientId);
         setSelectedPatientId(nextPatientId);
         setSelectedPatient(patients[nextPatientId]);
         setCurrentRecommendationIndex(0);
         setSavedEvaluation(null); // Reset saved evaluation to trigger reload
         window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        console.log('Already at last patient, cannot move forward');
       }
     }
   }, [currentRecommendationIndex, recommendationQueues, selectedPatientId, patients]);
