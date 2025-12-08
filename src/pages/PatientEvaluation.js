@@ -217,7 +217,9 @@ const PatientEvaluation = ({ userData }) => {
     localStorage.setItem(`completedEvaluations_${userData?.userId}`, JSON.stringify([...newCompleted]));
     try {
       if (userData?.userId) {
-        await fetch(`http://localhost:5001/api/users/${userData.userId}/completed`, {
+        // Use dataService's baseURL instead of hardcoded localhost
+        const apiBase = dataService.baseURL;
+        await fetch(`${apiBase}/users/${userData.userId}/completed`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ patientId })
         });
       }

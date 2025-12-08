@@ -73,17 +73,21 @@ const userEvaluationSessionSchema = new mongoose.Schema({
 
 // Method to add or update a patient evaluation
 userEvaluationSessionSchema.methods.addOrUpdatePatientEvaluation = function(evaluationData) {
-  const { patientId, evaluation_type } = evaluationData;
+  const { patientId, evaluation_type, recommendation_type } = evaluationData;
   
-  // Find existing evaluation for this patient
+  // Find existing evaluation for this patient AND recommendation type
   const existingEvalIndex = this.patientEvaluations.findIndex(
-    evaluation => evaluation.patientId === patientId
+    evaluation => evaluation.patientId === patientId && evaluation.recommendation_type === recommendation_type
   );
 
   if (evaluation_type === 'expert_recommendation') {
-    // This is an expert evaluation
-    if (existingEvalIndex === -1) {
-      throw new Error(`Cannot add expert evaluation: No main evaluation found for patient ${patientId}`);
+    // This is an expert evaluation - find the main evaluation first
+    const mainEvalIndex = this.patientEvaluations.findIndex(
+      evaluation => evaluation.patientId === patientId && evaluation.recommendation_type === recommendation_type
+    );
+    
+    if (mainEvalIndex === -1) {
+      throw new Error(`Cannot add expert evaluation: No main evaluation found for patient ${patientId} with type ${recommendation_type}`);
     }
     
     // Update the existing patient evaluation with expert data
@@ -95,14 +99,14 @@ userEvaluationSessionSchema.methods.addOrUpdatePatientEvaluation = function(eval
     }
     expertData.submittedAt = new Date();
     
-    this.patientEvaluations[existingEvalIndex].expertEvaluation = expertData;
-    console.log(`🔄 Updated patient ${patientId} evaluation with expert feedback`);
+    this.patientEvaluations[mainEvalIndex].expertEvaluation = expertData;
+    console.log(`🔄 Updated patient ${patientId} (${recommendation_type}) evaluation with expert feedback`);
     
   } else {
     // This is a main evaluation
     if (existingEvalIndex !== -1) {
-      // Patient evaluation already exists - this shouldn't normally happen
-      console.warn(`⚠️ Main evaluation for patient ${patientId} already exists, updating...`);
+      // Patient evaluation already exists - user is updating their evaluation
+      console.log(`🔄 Updating evaluation for patient ${patientId} (${recommendation_type})`);
       
       // Calculate time spent
       if (evaluationData.evaluationStartTime && evaluationData.evaluationEndTime) {
@@ -126,7 +130,7 @@ userEvaluationSessionSchema.methods.addOrUpdatePatientEvaluation = function(eval
       }
       
       this.patientEvaluations.push(evaluationData);
-      console.log(`➕ Added new evaluation for patient ${patientId}`);
+      console.log(`➕ Added new evaluation for patient ${patientId} (${recommendation_type})`);
     }
   }
   
