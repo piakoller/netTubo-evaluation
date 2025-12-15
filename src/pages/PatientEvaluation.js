@@ -330,6 +330,17 @@ const PatientEvaluation = ({ userData }) => {
         } else {
           // No expert evaluation needed, mark patient as completed and move to next
           await saveCompletedEvaluation(selectedPatientId);
+          // Move to first recommendation of next patient
+          const sortedIds = getSortedIds(patients);
+          const currentIdx = sortedIds.indexOf(selectedPatientId);
+          if (currentIdx >= 0 && currentIdx < sortedIds.length - 1) {
+            const nextPatientId = sortedIds[currentIdx + 1];
+            setSelectedPatientId(nextPatientId);
+            setSelectedPatient(patients[nextPatientId]);
+            setCurrentRecommendationIndex(0);
+            setSavedEvaluation(null); // Reset saved evaluation to trigger reload
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
         }
       } else {
         // Not the last recommendation, automatically advance to next
