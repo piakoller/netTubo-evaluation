@@ -15,32 +15,34 @@ function App() {
 
   useEffect(() => {
     const verifyUser = async () => {
-      const storedUserData = localStorage.getItem('userStudyData');
-      if (storedUserData) {
-        const parsedData = JSON.parse(storedUserData);
-        if (parsedData.userId) {
-          try {
-            const apiBase = process.env.REACT_APP_API_BASE || 'http://localhost:3001';
-            const response = await fetch(`${apiBase}/api/users/verify/${parsedData.userId}`);
+      // Use shared API_BASE logic and helper to read saved user
+      const RAW_API_BASE = process.env.REACT_APP_API_BASE || '';
+      const API_BASE = RAW_API_BASE.replace(/\/$/, '');
+      const { getCurrentUserStudyData, clearUserStudyData } = await import('./utils/user');
+      const parsedData = getCurrentUserStudyData();
+      console.log('App startup: found userStudyData=', parsedData, 'API_BASE=', API_BASE);
+      if (parsedData?.userId) {
+        try {
+          const response = await fetch(`${API_BASE}/api/users/verify/${parsedData.userId}`);
 
-            if (response.ok) {
-              const verifiedUser = await response.json();
-              setUserData(verifiedUser);
-              setCurrentStep('evaluation'); // Proceed to evaluation
-            } else {
-              // User not found in DB, clear local storage and reset
-              localStorage.removeItem('userStudyData');
-              setUserData(null);
-              setCurrentStep('registration');
-              messageApi.error('Your session has expired or is invalid. Please register again.');
-            }
-          } catch (error) {
-            console.error('Failed to verify user session:', error);
-            localStorage.removeItem('userStudyData');
+          if (response.ok) {
+            const verifiedUser = await response.json();
+            console.log('App startup: user verified on server:', verifiedUser);
+            setUserData(verifiedUser);
+            setCurrentStep('evaluation'); // Proceed to evaluation
+          } else {
+            // User not found in DB, clear local storage and reset
+            clearUserStudyData();
             setUserData(null);
             setCurrentStep('registration');
-            messageApi.error('Could not connect to the server to verify your session. Please try again later.');
+            messageApi.error('Your session has expired or is invalid. Please register again.');
           }
+        } catch (error) {
+          console.error('Failed to verify user session:', error);
+          clearUserStudyData();
+          setUserData(null);
+          setCurrentStep('registration');
+          messageApi.error('Could not connect to the server to verify your session. Please try again later.');
         }
       }
     };

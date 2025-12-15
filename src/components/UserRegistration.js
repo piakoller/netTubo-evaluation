@@ -114,8 +114,16 @@ const UserRegistration = ({ onRegistrationComplete }) => {
       console.log('User registered in database:', result);
       
       // Still store in localStorage for session management (as backup)
-      localStorage.setItem('userStudyData', JSON.stringify(userData));
-      
+      try {
+        // Save via helper if available
+        // Lazy import to avoid cycles
+        const { saveUserStudyData } = await import('../utils/user');
+        saveUserStudyData(userData);
+      } catch (e) {
+        // Fallback
+        localStorage.setItem('userStudyData', JSON.stringify(userData));
+      }
+      console.log('Registration: saved userStudyData with userId=', userData.userId);
       // Call parent callback to proceed to instructions
       onRegistrationComplete(userData);
       
@@ -138,8 +146,13 @@ const UserRegistration = ({ onRegistrationComplete }) => {
         sessionStart: new Date().toISOString()
       };
 
-      localStorage.setItem('userStudyData', JSON.stringify(userData));
-      console.log('Saved to localStorage as fallback:', userData);
+      try {
+        const { saveUserStudyData } = await import('../utils/user');
+        saveUserStudyData(userData);
+      } catch (e) {
+        localStorage.setItem('userStudyData', JSON.stringify(userData));
+      }
+      console.log('Registration fallback: saved userStudyData with userId=', userData.userId);
 
       onRegistrationComplete(userData);
     } finally {
