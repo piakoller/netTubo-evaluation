@@ -69,8 +69,6 @@ const PatientInfo = ({ patient, showExpertRecommendation = false }) => {
         <div style={{
           whiteSpace: 'pre-wrap',
           marginBottom: 0,
-          maxHeight: expandClinical ? 'none' : 450,
-          overflow: 'hidden',
           lineHeight: 1.6
         }}>
           {patient.clinical_information || 'No clinical information available'}
