@@ -14,8 +14,13 @@ const { Option } = Select;
 // Moved outside the component to avoid being part of its definition
 const getSortedIds = (patients) => {
   if (!patients) return [];
-  // Example sorting logic, adjust as needed
-  return Object.keys(patients).sort((a, b) => (patients[a]?.case_id || 0) - (patients[b]?.case_id || 0));
+  // Exclude patients with case_id 1, 2, or 3
+  return Object.keys(patients)
+    .filter((id) => {
+      const cid = patients[id]?.case_id;
+      return cid !== 1 && cid !== 2 && cid !== 3;
+    })
+    .sort((a, b) => (patients[a]?.case_id || 0) - (patients[b]?.case_id || 0));
 };
 
 const PatientEvaluation = ({ userData }) => {
@@ -47,7 +52,13 @@ const PatientEvaluation = ({ userData }) => {
       try {
         setLoading(true);
         const fetchedPatients = await dataService.loadPatientRecommendations();
-        const patientsMap = fetchedPatients || {};
+
+        // Exclude patients with case_id 1, 2, or 3 from the loaded map
+        const patientsMap = Object.fromEntries(
+          Object.entries(fetchedPatients || {}).filter(
+            ([, patient]) => patient?.case_id !== 1 && patient?.case_id !== 2 && patient?.case_id !== 3
+          )
+        );
         setPatients(patientsMap);
 
         // DEBUG: Log patient data structure
