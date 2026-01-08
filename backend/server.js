@@ -331,15 +331,14 @@ async function loadAllPatientData() {
       try {
         // Dynamically discover all patient collections (patient-1, patient-2, etc.)
         const collections = await mongoWorkflowConnection.db.listCollections().toArray();
-        const patientCollections = collections
+        let patientCollections = collections
           .filter(c => c.name.startsWith('patient-'))
           .map(c => c.name.replace('patient-', ''));
-        
-        console.log(`📊 Found ${patientCollections.length} patient collections in MongoDB:`, patientCollections);
-        
+        // Exclude patient 1, 2, 3
+        patientCollections = patientCollections.filter(pid => pid !== '1' && pid !== '2' && pid !== '3');
+        console.log(`📊 Found ${patientCollections.length} patient collections in MongoDB (excluding 1,2,3):`, patientCollections);
         for (const patientId of patientCollections) {
           if (patientData[patientId]) continue; // Skip if already processed
-          
           const workflow = await loadWorkflowForPatient(patientId);
           if (workflow) {
             const processedPatient = await processWorkflowIntoPatientData(patientId, workflow);
@@ -349,8 +348,7 @@ async function loadAllPatientData() {
             }
           }
         }
-        
-        console.log(`📊 Attempted to load ${patientCollections.length} patient collections from MongoDB`);
+        console.log(`📊 Attempted to load ${patientCollections.length} patient collections from MongoDB (excluding 1,2,3)`);
       } catch (mongoError) {
         console.error('❌ Error loading patients from MongoDB:', mongoError.message);
         console.log('🔄 Continuing with file-based discovery...');
@@ -373,7 +371,8 @@ async function loadAllPatientData() {
       for (const dirent of patientDirs) {
         const idPart = dirent.name.replace('patient_', '').trim();
         const patientId = idPart;
-        if (!patientId || patientData[patientId]) continue; // Skip if already processed from MongoDB
+        // Exclude patient 1, 2, 3
+        if (!patientId || patientData[patientId] || patientId === '1' || patientId === '2' || patientId === '3') continue; // Skip if already processed or excluded
 
         const workflow = await loadWorkflowForPatient(patientId);
         if (workflow) {
@@ -392,8 +391,8 @@ async function loadAllPatientData() {
         const m = dirent.name.match(workflowFileRegex);
         if (!m) continue;
         const patientId = m[1];
-        // Skip if already processed via directory or MongoDB
-        if (patientData[patientId]) continue;
+        // Exclude patient 1, 2, 3
+        if (patientData[patientId] || patientId === '1' || patientId === '2' || patientId === '3') continue;
 
         const workflow = await loadWorkflowForPatient(patientId);
         if (workflow) {
