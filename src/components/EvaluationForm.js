@@ -89,6 +89,13 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
     { value: 'no', label: 'No' }
   ];
 
+  // Options for the newer evidence question
+  const newerEvidenceOptions = [
+    { value: 'yes', label: 'Yes' },
+    { value: 'no', label: 'No' },
+    { value: 'not_relevant', label: 'Not relevant / No newer evidence exists' }
+  ];
+
   // Evaluation categories and questions (updated to match user specification)
   const evaluationCategories = [
     {
@@ -108,8 +115,9 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
         },
         {
           key: 'acknowledges_new_data',
-          label: 'If newer, potentially practice-changing data exist (e.g., conference abstracts, preprints, press releases), does the answer acknowledge them?',
-          description: ''
+          label: 'If newer, potentially practice-changing data exist (e.g., conference abstracts, preprints, press releases), does the answer use them?',
+          description: '',
+          options: newerEvidenceOptions
         },
         {
           key: 'citations_real',
@@ -402,7 +410,7 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
                       rules={[{ required: true, message: `Please answer this question` }]}
                     >
                       <Radio.Group>
-                        {yesNoOptions.map(option => (
+                        {(question.options || yesNoOptions).map(option => (
                           <Radio key={option.value} value={option.value}>
                             {option.label}
                           </Radio>

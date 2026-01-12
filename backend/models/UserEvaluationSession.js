@@ -14,7 +14,7 @@ const patientEvaluationSchema = new mongoose.Schema({
   // Detailed Yes/No Questions - Category 1: Evidence Retrieval
   guideline_found: { type: String, enum: ['yes', 'no'] },
   cites_primary_study: { type: String, enum: ['yes', 'no'] },
-  acknowledges_new_data: { type: String, enum: ['yes', 'no'] },
+  acknowledges_new_data: { type: String, enum: ['yes', 'no', 'not_relevant'] },
   citations_real: { type: String, enum: ['yes', 'no'] },
   
   // Category 2: Clinical Soundness and Safety
