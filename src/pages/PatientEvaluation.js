@@ -219,6 +219,13 @@ const PatientEvaluation = ({ userData }) => {
           currentRecommendation.type
         );
         setSavedEvaluation(evaluation);
+        
+        // Log which cases the user has already evaluated
+        if (evaluation) {
+          const sortedIds = getSortedIds(patients);
+          const displayId = getDisplayId(selectedPatientId, sortedIds);
+          console.log(`✅ User has already evaluated Patient ${displayId} (backend ID: ${selectedPatientId}) - ${currentRecommendation.type} recommendation`);
+        }
       } catch (error) {
         console.error('Error loading saved evaluation:', error);
         setSavedEvaluation(null);
