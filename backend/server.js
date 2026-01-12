@@ -608,8 +608,6 @@ async function startServer() {
       console.log(`📊 MongoDB (evaluations): ${dbConnection.isConnected ? '✅ Connected' : '❌ Disconnected'}`);
       console.log(`📊 MongoDB (workflows): ${mongoWorkflowDb ? '✅ Connected' : '❌ Disconnected'}`);
       console.log(`📊 MongoDB (baseline): ${mongoBaselineDb ? '✅ Connected' : '❌ Disconnected'}`);
-      console.log(`📁 Batch results path: ${BATCH_RESULTS_PATH}`);
-      console.log(`📊 Patient data: MongoDB collections only (patient-1, patient-2, patient-3)`);
       
       // Check if batch results path exists
       fs.pathExists(BATCH_RESULTS_PATH).then(exists => {
