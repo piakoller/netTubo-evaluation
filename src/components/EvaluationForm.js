@@ -54,7 +54,25 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
         quality_of_life: savedEvaluation.quality_of_life
       };
       console.log('Setting form values:', formValues);
-      form.setFieldsValue(formValues);
+      
+      // Use setFields to mark fields as touched and set values
+      const fieldsToSet = Object.entries(formValues)
+        .filter(([, value]) => value !== undefined && value !== null)
+        .map(([name, value]) => ({
+          name,
+          value,
+          touched: true,
+          validating: false
+        }));
+      
+      form.setFields(fieldsToSet);
+      
+      // Also validate to ensure form state is correct
+      setTimeout(() => {
+        form.validateFields().catch(() => {
+          // Validation might fail, but that's ok - just checking state
+        });
+      }, 0);
     } else {
       // Reset to default values when no saved evaluation
       console.log('No saved evaluation, resetting form');
