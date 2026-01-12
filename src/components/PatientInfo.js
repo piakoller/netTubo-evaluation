@@ -10,7 +10,7 @@ const { Title, Paragraph } = Typography;
 // - patient.clinical_information
 // - patient.clinical_question
 // - optional: patient.expert_recommendation
-const PatientInfo = ({ patient, showExpertRecommendation = false }) => {
+const PatientInfo = ({ patient, displayId, showExpertRecommendation = false }) => {
   // Hooks must be at the top-level and not behind any early return
   const [expandClinical, setExpandClinical] = useState(false);
   const [expandQuestion, setExpandQuestion] = useState(false);
@@ -38,7 +38,7 @@ const PatientInfo = ({ patient, showExpertRecommendation = false }) => {
   const title = (
     <span>
       <UserOutlined style={{ marginRight: 8 }} />
-      Patient {patient.id}
+      Patient {displayId !== undefined ? displayId : patient.id}
     </span>
   );
 

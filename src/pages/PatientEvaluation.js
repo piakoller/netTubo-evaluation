@@ -23,6 +23,17 @@ const getSortedIds = (patients) => {
     .sort((a, b) => (patients[a]?.case_id || 0) - (patients[b]?.case_id || 0));
 };
 
+// Patient ID mapping: Display sequential IDs (1,2,3...) but use actual backend IDs (4,5,6...)
+const getDisplayId = (backendId, sortedIds) => {
+  const index = sortedIds.indexOf(backendId);
+  return index >= 0 ? index + 1 : backendId;
+};
+
+const getBackendId = (displayId, sortedIds) => {
+  const index = displayId - 1;
+  return sortedIds[index] || null;
+};
+
 const PatientEvaluation = ({ userData }) => {
   // --- State Definitions ---
   // Merged from the top of the broken file
@@ -432,6 +443,8 @@ const PatientEvaluation = ({ userData }) => {
     );
   }
 
+  const sortedIds = getSortedIds(patients);
+
   return (
     <div style={{ maxWidth: '1600px', margin: '0 auto' }}>
       <Card style={{ marginBottom: 16 }}>
@@ -455,9 +468,9 @@ const PatientEvaluation = ({ userData }) => {
               }}
               style={{ width: 150 }}
             >
-              {getSortedIds(patients).map(patientId => (
+              {sortedIds.map(patientId => (
                 <Option key={patientId} value={patientId}>
-                  Patient {patientId}
+                  Patient {getDisplayId(patientId, sortedIds)}
                   {completedEvaluations.has(patientId) && ' ✓'}
                 </Option>
               ))}
@@ -473,7 +486,7 @@ const PatientEvaluation = ({ userData }) => {
 
       {selectedPatient && (
         <Card style={{ marginBottom: 16 }}>
-          <PatientInfo patient={selectedPatient} />
+          <PatientInfo patient={selectedPatient} displayId={getDisplayId(selectedPatientId, sortedIds)} />
         </Card>
       )}
 
@@ -485,10 +498,10 @@ const PatientEvaluation = ({ userData }) => {
               onClick={handlePreviousRecommendation}
               disabled={
                 currentRecommendationIndex === 0 && 
-                getSortedIds(patients).indexOf(selectedPatientId) === 0
+                sortedIds.indexOf(selectedPatientId) === 0
               }
               title={
-                currentRecommendationIndex === 0 && getSortedIds(patients).indexOf(selectedPatientId) === 0
+                currentRecommendationIndex === 0 && sortedIds.indexOf(selectedPatientId) === 0
                   ? 'This is the first recommendation'
                   : 'Go to previous recommendation (or previous patient)'
               }
@@ -496,18 +509,18 @@ const PatientEvaluation = ({ userData }) => {
               ← Previous
             </Button>
             <Text strong>
-              Patient {getSortedIds(patients).indexOf(selectedPatientId) + 1} of {Object.keys(patients).length} | 
+              Patient {getDisplayId(selectedPatientId, sortedIds)} of {sortedIds.length} | 
               Recommendation {currentRecommendationIndex + 1} of {(recommendationQueues[selectedPatientId] || []).length}
             </Text>
             <Button 
               onClick={handleNextRecommendation}
               disabled={
                 currentRecommendationIndex >= (recommendationQueues[selectedPatientId] || []).length - 1 &&
-                getSortedIds(patients).indexOf(selectedPatientId) === Object.keys(patients).length - 1
+                sortedIds.indexOf(selectedPatientId) === sortedIds.length - 1
               }
               title={
                 currentRecommendationIndex >= (recommendationQueues[selectedPatientId] || []).length - 1 &&
-                getSortedIds(patients).indexOf(selectedPatientId) === Object.keys(patients).length - 1
+                sortedIds.indexOf(selectedPatientId) === sortedIds.length - 1
                   ? 'This is the last recommendation'
                   : 'Go to next recommendation (or next patient)'
               }
