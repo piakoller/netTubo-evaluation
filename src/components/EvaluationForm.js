@@ -381,13 +381,7 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
                     <div style={{ marginBottom: 12, color: '#666', fontSize: 13 }}>
                       {question.description}
                     </div>
-                    <Radio.Group
-                      onChange={(e) => {
-                        // Ensure the form registers the change explicitly and log it
-                        console.log(`Radio change for ${question.key}:`, e.target.value);
-                        form.setFieldsValue({ [question.key]: e.target.value });
-                      }}
-                    >
+                    <Radio.Group>
                       {yesNoOptions.map(option => (
                         <Radio key={option.value} value={option.value}>
                           {option.label}
