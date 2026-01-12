@@ -390,26 +390,26 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
                 </Text>
                 
                 {category.questions.map(question => (
-                  <Form.Item
-                    key={question.key}
-                    name={question.key}
-                    label={null}
-                    rules={[{ required: true, message: `Please answer ${question.label}` }]}
-                  >
+                  <div key={question.key} style={{ marginBottom: 20 }}>
                     <div style={{ marginBottom: 4, fontWeight: 500 }}>
                       {question.label}
                     </div>
                     <div style={{ marginBottom: 12, color: '#666', fontSize: 13 }}>
                       {question.description}
                     </div>
-                    <Radio.Group>
-                      {yesNoOptions.map(option => (
-                        <Radio key={option.value} value={option.value}>
-                          {option.label}
-                        </Radio>
-                      ))}
-                    </Radio.Group>
-                  </Form.Item>
+                    <Form.Item
+                      name={question.key}
+                      rules={[{ required: true, message: `Please answer this question` }]}
+                    >
+                      <Radio.Group>
+                        {yesNoOptions.map(option => (
+                          <Radio key={option.value} value={option.value}>
+                            {option.label}
+                          </Radio>
+                        ))}
+                      </Radio.Group>
+                    </Form.Item>
+                  </div>
                 ))}
               </div>
             ))}

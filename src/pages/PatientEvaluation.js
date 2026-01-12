@@ -150,12 +150,16 @@ const PatientEvaluation = ({ userData }) => {
             const data = await response.json();
             const sortedIds = getSortedIds(patientsMap);
             console.log('\n=== USER COMPLETED EVALUATIONS FROM DATABASE ===');
-            console.log(`Total evaluations: ${data.evaluationCount}`);
-            if (data.session && data.session.patientEvaluations) {
-              data.session.patientEvaluations.forEach((evaluation) => {
-                const displayId = getDisplayId(evaluation.patientId, sortedIds);
-                console.log(`✅ Patient ${displayId} (backend ID: ${evaluation.patientId}) - ${evaluation.recommendation_type} - Overall Rating: ${evaluation.overallRating}/10`);
-              });
+            if (data.evaluationCount === 0) {
+              console.log('No evaluations from this user yet.');
+            } else {
+              console.log(`Total evaluations: ${data.evaluationCount}`);
+              if (data.session && data.session.patientEvaluations) {
+                data.session.patientEvaluations.forEach((evaluation) => {
+                  const displayId = getDisplayId(evaluation.patientId, sortedIds);
+                  console.log(`✅ Patient ${displayId} (backend ID: ${evaluation.patientId}) - ${evaluation.recommendation_type} - Overall Rating: ${evaluation.overallRating}/10`);
+                });
+              }
             }
             console.log('===============================================\n');
           }
@@ -617,7 +621,7 @@ const PatientEvaluation = ({ userData }) => {
             <Title level={2}><CheckCircleOutlined style={{ marginRight: 8 }} />Evaluation</Title>
             {selectedPatient ? (
               <EvaluationForm
-                key={`${selectedPatientId}-${currentRecommendationIndex}-${currentRecommendation?.type || 'none'}`}
+                key={`${selectedPatientId}-${currentRecommendation?.type || 'none'}`}
                 onSubmit={handleEvaluationSubmit}
                 onExpertSubmit={handleExpertEvaluationSubmit}
                 loading={submitting}

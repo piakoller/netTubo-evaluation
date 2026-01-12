@@ -253,7 +253,8 @@ class DataService {
         );
         return evaluation || null;
       } catch (error) {
-        console.error('Error loading evaluation:', error);\n        return null;
+        console.error('Error loading evaluation:', error);
+        return null;
       }
     }
   }

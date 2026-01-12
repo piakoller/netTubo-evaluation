@@ -182,7 +182,11 @@ router.get('/user/:userId', async (req, res) => {
     const session = await UserEvaluationSession.findOne({ userId });
     
     if (!session) {
-      return res.status(404).json({ error: 'No evaluation session found for this user' });
+      // User hasn't started any evaluations yet - this is normal, not an error
+      return res.status(200).json({ 
+        session: null,
+        evaluationCount: 0
+      });
     }
     
     res.json({
