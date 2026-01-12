@@ -33,7 +33,7 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
   // Load saved evaluation data into form
   React.useEffect(() => {
     if (savedEvaluation) {
-      // Removed verbose logging to avoid console spam during re-renders
+      console.log('Loading saved evaluation into form:', savedEvaluation);
       const formValues = {
         overall_rating: savedEvaluation.overallRating || savedEvaluation.overall_rating || 5,
         implementation_willingness: savedEvaluation.implementationWillingness || savedEvaluation.implementation_willingness,
@@ -53,9 +53,12 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
         personalization: savedEvaluation.personalization,
         quality_of_life: savedEvaluation.quality_of_life
       };
+      console.log('Setting form values:', formValues);
       form.setFieldsValue(formValues);
     } else {
       // Reset to default values when no saved evaluation
+      console.log('No saved evaluation, resetting form');
+      form.resetFields();
       form.setFieldsValue({
         overall_rating: 5
       });
