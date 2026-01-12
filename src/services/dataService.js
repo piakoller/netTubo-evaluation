@@ -136,16 +136,15 @@ class DataService {
         implementationWillingness: evaluationData.implementation_willingness,
         comments: evaluationData.comments || '',
         
-        // Detailed Yes/No questions
-        guideline_adherence: evaluationData.guideline_adherence,
-        clinical_trial_integration: evaluationData.clinical_trial_integration,
-        diagnostic_soundness: evaluationData.diagnostic_soundness,
+        // Detailed Yes/No questions - field names now match between frontend and backend
+        guideline_found: evaluationData.guideline_found,
+        cites_primary_study: evaluationData.cites_primary_study,
+        acknowledges_new_data: evaluationData.acknowledges_new_data,
+        citations_real: evaluationData.citations_real,
         clinical_appropriateness: evaluationData.clinical_appropriateness,
         contraindication_awareness: evaluationData.contraindication_awareness,
         treatment_completeness: evaluationData.treatment_completeness,
-        rationale_clarity: evaluationData.rationale_clarity,
-        risk_benefit_transparency: evaluationData.risk_benefit_transparency,
-        consideration_alternatives: evaluationData.consideration_alternatives,
+        notes_guideline_evidence_conflict: evaluationData.notes_guideline_evidence_conflict,
         actionable_next_steps: evaluationData.actionable_next_steps,
         personalization: evaluationData.personalization,
         quality_of_life: evaluationData.quality_of_life,
@@ -234,6 +233,7 @@ class DataService {
       
       if (response.ok) {
         const result = await response.json();
+        // Field names now match between frontend and backend, no mapping needed
         return result.evaluation || null;
       } else if (response.status === 404) {
         return null; // No evaluation found
@@ -253,8 +253,7 @@ class DataService {
         );
         return evaluation || null;
       } catch (error) {
-        console.error('Error loading evaluation:', error);
-        return null;
+        console.error('Error loading evaluation:', error);\n        return null;
       }
     }
   }

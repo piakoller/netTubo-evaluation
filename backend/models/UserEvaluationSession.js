@@ -11,16 +11,19 @@ const patientEvaluationSchema = new mongoose.Schema({
   implementationWillingness: { type: String, enum: ['yes', 'maybe', 'no'] },
   comments: { type: String, default: '' },
 
-  // Detailed Yes/No Questions
-  guideline_adherence: { type: String, enum: ['yes', 'no'] },
-  clinical_trial_integration: { type: String, enum: ['yes', 'no'] },
-  diagnostic_soundness: { type: String, enum: ['yes', 'no'] },
+  // Detailed Yes/No Questions - Category 1: Evidence Retrieval
+  guideline_found: { type: String, enum: ['yes', 'no'] },
+  cites_primary_study: { type: String, enum: ['yes', 'no'] },
+  acknowledges_new_data: { type: String, enum: ['yes', 'no'] },
+  citations_real: { type: String, enum: ['yes', 'no'] },
+  
+  // Category 2: Clinical Soundness and Safety
   clinical_appropriateness: { type: String, enum: ['yes', 'no'] },
   contraindication_awareness: { type: String, enum: ['yes', 'no'] },
   treatment_completeness: { type: String, enum: ['yes', 'no'] },
-  rationale_clarity: { type: String, enum: ['yes', 'no'] },
-  risk_benefit_transparency: { type: String, enum: ['yes', 'no'] },
-  consideration_alternatives: { type: String, enum: ['yes', 'no'] },
+  notes_guideline_evidence_conflict: { type: String, enum: ['yes', 'no'] },
+  
+  // Category 3: Actionability and Patient-Centeredness
   actionable_next_steps: { type: String, enum: ['yes', 'no'] },
   personalization: { type: String, enum: ['yes', 'no'] },
   quality_of_life: { type: String, enum: ['yes', 'no'] },
