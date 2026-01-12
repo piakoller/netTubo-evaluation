@@ -48,6 +48,7 @@ const PatientEvaluation = ({ userData }) => {
   const [currentRecommendationIndex, setCurrentRecommendationIndex] = useState(0);
   const [savedEvaluation, setSavedEvaluation] = useState(null);
   const [completedEvaluations, setCompletedEvaluations] = useState(new Set());
+  const [completedIndividualEvals, setCompletedIndividualEvals] = useState(new Set()); // Track patient+type combinations
   const [studyCompleted, setStudyCompleted] = useState(false);
   // Track a patient that is awaiting expert-evaluation so we keep the form mounted
   const [pendingExpertPatientId, setPendingExpertPatientId] = useState(null);
@@ -134,6 +135,13 @@ const PatientEvaluation = ({ userData }) => {
         // Load completed status from localStorage as fallback
         const savedCompleted = localStorage.getItem(`completedEvaluations_${userData?.userId}`);
         if (savedCompleted) setCompletedEvaluations(new Set(JSON.parse(savedCompleted)));
+        
+        // Load completed individual evaluations
+        const savedIndividualEvals = localStorage.getItem(`completedIndividualEvals_${userData?.userId}`);
+        if (savedIndividualEvals) {
+          setCompletedIndividualEvals(new Set(JSON.parse(savedIndividualEvals)));
+          console.log('📊 Loaded completed individual evaluations:', JSON.parse(savedIndividualEvals));
+        }
       } catch (err) {
         console.error('Failed to load data', err);
         message.error('Failed to load patient data');
@@ -337,7 +345,37 @@ const PatientEvaluation = ({ userData }) => {
         timestamp: new Date().toISOString(),
         ...evaluationData
       };
+      
+      // Log detailed evaluation response
+      const sortedIds = getSortedIds(patients);
+      const displayId = getDisplayId(selectedPatientId, sortedIds);
+      console.log(`\n📝 EVALUATION SAVED - Patient ${displayId} (backend ID: ${selectedPatientId}) - ${currentRecommendation?.type}`);
+      console.log('Selected answers:', {
+        overall_rating: evaluationData.overall_rating,
+        implementation_willingness: evaluationData.implementation_willingness,
+        guideline_found: evaluationData.guideline_found,
+        cites_primary_study: evaluationData.cites_primary_study,
+        acknowledges_new_data: evaluationData.acknowledges_new_data,
+        citations_real: evaluationData.citations_real,
+        clinical_appropriateness: evaluationData.clinical_appropriateness,
+        contraindication_awareness: evaluationData.contraindication_awareness,
+        treatment_completeness: evaluationData.treatment_completeness,
+        notes_guideline_evidence_conflict: evaluationData.notes_guideline_evidence_conflict,
+        actionable_next_steps: evaluationData.actionable_next_steps,
+        personalization: evaluationData.personalization,
+        quality_of_life: evaluationData.quality_of_life,
+        comments: evaluationData.comments || '(no comment)'
+      });
+      console.log('\n');
+      
       await dataService.saveEvaluation(evaluation);
+      
+      // Mark this individual evaluation as complete
+      const evalKey = `${selectedPatientId}-${currentRecommendation?.type}`;
+      const newCompletedIndividualEvals = new Set([...completedIndividualEvals, evalKey]);
+      setCompletedIndividualEvals(newCompletedIndividualEvals);
+      localStorage.setItem(`completedIndividualEvals_${userData?.userId}`, JSON.stringify([...newCompletedIndividualEvals]));
+      
       message.success('Evaluation submitted successfully!');
 
       // Refresh the saved evaluation to show updated data
@@ -417,9 +455,11 @@ const PatientEvaluation = ({ userData }) => {
 
   const handleRestartStudy = useCallback(() => {
     setCompletedEvaluations(new Set());
+    setCompletedIndividualEvals(new Set());
     setStudyCompleted(false);
     if (userData?.userId) {
       localStorage.removeItem(`completedEvaluations_${userData.userId}`);
+      localStorage.removeItem(`completedIndividualEvals_${userData.userId}`);
     }
     // Let the auto-select useEffect find the first patient
     // Resetting selected patient id to trigger the effect
@@ -433,9 +473,10 @@ const PatientEvaluation = ({ userData }) => {
     return <Card loading style={{ minHeight: 400 }}>Loading patient data...</Card>;
   }
 
-  const totalPatients = Object.keys(patients).length;
-  const completedCount = completedEvaluations.size;
-  const progressPercent = totalPatients > 0 ? (completedCount / totalPatients) * 100 : 0;
+  // Calculate total number of evaluations needed (sum of all recommendation queues)
+  const totalEvaluations = Object.values(recommendationQueues).reduce((sum, queue) => sum + queue.length, 0);
+  const completedCount = completedIndividualEvals.size;
+  const progressPercent = totalEvaluations > 0 ? (completedCount / totalEvaluations) * 100 : 0;
 
   if (studyCompleted) {
     return (
@@ -485,8 +526,8 @@ const PatientEvaluation = ({ userData }) => {
           </Col>
           <Col>
             <Text strong>Progress: </Text>
-            <Text>{completedCount}/{totalPatients} cases completed</Text>
-            <Progress percent={progressPercent.toFixed(1)} size="small" style={{ width: 200, marginLeft: 16 }} />
+            <Text>{completedCount}/{totalEvaluations} evaluations completed</Text>
+            <Progress percent={Math.round(progressPercent)} size="small" style={{ width: 200, marginLeft: 16 }} />
           </Col>
         </Row>
       </Card>
