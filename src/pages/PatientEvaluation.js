@@ -73,23 +73,23 @@ const PatientEvaluation = ({ userData }) => {
         );
         setPatients(patientsMap);
 
-        // DEBUG: Log patient data structure
-        console.log('=== PATIENT DATA DEBUG ===');
-        console.log('Total patients loaded:', Object.keys(patientsMap).length);
-        console.log('Patient IDs:', Object.keys(patientsMap));
+        // // DEBUG: Log patient data structure
+        // console.log('=== PATIENT DATA DEBUG ===');
+        // console.log('Total patients loaded:', Object.keys(patientsMap).length);
+        // console.log('Patient IDs:', Object.keys(patientsMap));
         
-        // Log each patient's data
-        Object.entries(patientsMap).forEach(([id, patient]) => {
-          console.log(`\nPatient ${id}:`, {
-            case_id: patient?.case_id,
-            has_baseline: !!patient?.baseline_recommendation,
-            has_agentic: !!patient?.recommendation,
-            has_expert: !!patient?.expert_recommendation,
-            baseline_source: patient?.baseline_recommendation?.source,
-            agentic_source: patient?.recommendation?.source
-          });
-        });
-        console.log('========================\n');
+        // // Log each patient's data
+        // Object.entries(patientsMap).forEach(([id, patient]) => {
+        //   console.log(`\nPatient ${id}:`, {
+        //     case_id: patient?.case_id,
+        //     has_baseline: !!patient?.baseline_recommendation,
+        //     has_agentic: !!patient?.recommendation,
+        //     has_expert: !!patient?.expert_recommendation,
+        //     baseline_source: patient?.baseline_recommendation?.source,
+        //     agentic_source: patient?.recommendation?.source
+        //   });
+        // });
+        // console.log('========================\n');
 
         // build queues: randomize order of baseline and agentic per patient
         // using patient index as seed for consistent ordering across sessions
@@ -226,14 +226,15 @@ const PatientEvaluation = ({ userData }) => {
           selectedPatientId,
           currentRecommendation.type
         );
-        setSavedEvaluation(evaluation);
         
-        // Log which cases the user has already evaluated
-        if (evaluation) {
+        // Only log and update if evaluation actually changed
+        if (evaluation && (!savedEvaluation || savedEvaluation.timestamp !== evaluation.timestamp)) {
           const sortedIds = getSortedIds(patients);
           const displayId = getDisplayId(selectedPatientId, sortedIds);
           console.log(`✅ User has already evaluated Patient ${displayId} (backend ID: ${selectedPatientId}) - ${currentRecommendation.type} recommendation`);
         }
+        
+        setSavedEvaluation(evaluation);
       } catch (error) {
         console.error('Error loading saved evaluation:', error);
         setSavedEvaluation(null);
@@ -241,7 +242,7 @@ const PatientEvaluation = ({ userData }) => {
     };
 
     loadSavedEvaluation();
-  }, [selectedPatientId, currentRecommendation, userData?.userId, currentRecommendationIndex]);
+  }, [selectedPatientId, currentRecommendation?.type, userData?.userId, patients]);
 
   // --- Effect: Auto-open expert modal when needed ---
   useEffect(() => {
