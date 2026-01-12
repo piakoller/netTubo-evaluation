@@ -54,7 +54,8 @@ const SingleRecommendation = ({ title, recommendation, nctUrlMap = {}, showPubli
   const { raw_response } = recommendation;
 
   const sanitizedRaw = (raw_response || '')
-    .replace(/<\/?(therapy_recommendation|rationale)>/gi, '')
+    // Remove XML-like tags with optional markdown formatting (###, **, etc.) before/after
+    .replace(/[#*\s]*<\/?(therapy_recommendation|rationale)>[#*\s]*/gi, '')
     .replace(/\\n/g, '\n')
     .trim();
 
