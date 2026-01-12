@@ -142,6 +142,26 @@ const PatientEvaluation = ({ userData }) => {
           setCompletedIndividualEvals(new Set(JSON.parse(savedIndividualEvals)));
           console.log('📊 Loaded completed individual evaluations:', JSON.parse(savedIndividualEvals));
         }
+        
+        // Fetch and log user's completed evaluations from database
+        try {
+          const response = await fetch(`${dataService.baseURL}/evaluations/user/${userData.userId}`);
+          if (response.ok) {
+            const data = await response.json();
+            const sortedIds = getSortedIds(patientsMap);
+            console.log('\n=== USER COMPLETED EVALUATIONS FROM DATABASE ===');
+            console.log(`Total evaluations: ${data.evaluationCount}`);
+            if (data.session && data.session.patientEvaluations) {
+              data.session.patientEvaluations.forEach((evaluation) => {
+                const displayId = getDisplayId(evaluation.patientId, sortedIds);
+                console.log(`✅ Patient ${displayId} (backend ID: ${evaluation.patientId}) - ${evaluation.recommendation_type} - Overall Rating: ${evaluation.overallRating}/10`);
+              });
+            }
+            console.log('===============================================\n');
+          }
+        } catch (error) {
+          console.log('Could not fetch user evaluations from database:', error.message);
+        }
       } catch (err) {
         console.error('Failed to load data', err);
         message.error('Failed to load patient data');

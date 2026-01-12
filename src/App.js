@@ -20,14 +20,12 @@ function App() {
       const API_BASE = RAW_API_BASE.replace(/\/$/, '');
       const { getCurrentUserStudyData, clearUserStudyData } = await import('./utils/user');
       const parsedData = getCurrentUserStudyData();
-      console.log('App startup: found userStudyData=', parsedData, 'API_BASE=', API_BASE);
       if (parsedData?.userId) {
         try {
           const response = await fetch(`${API_BASE}/api/users/verify/${parsedData.userId}`);
 
           if (response.ok) {
             const verifiedUser = await response.json();
-            console.log('App startup: user verified on server:', verifiedUser);
             setUserData(verifiedUser);
             setCurrentStep('evaluation'); // Proceed to evaluation
           } else {
