@@ -1,3 +1,28 @@
+// Sync any locally stored evaluations to backend if not present
+async function syncLocalEvaluationsToBackend(userId, backendEvaluationsSet) {
+  const localEvalsRaw = localStorage.getItem('evaluations');
+  if (!localEvalsRaw) return;
+  const localEvals = JSON.parse(localEvalsRaw);
+  let syncedCount = 0;
+  for (const evalObj of localEvals) {
+    // Only sync if this evaluation belongs to the current user
+    if (evalObj.user_data?.userId !== userId) continue;
+    // Build a unique key for this evaluation (patientId-recommendation_type)
+    const key = `${evalObj.patient_id || evalObj.patientId}-${evalObj.recommendation_type}`;
+    if (!backendEvaluationsSet.has(key)) {
+      try {
+        await dataService.saveEvaluation(evalObj);
+        syncedCount++;
+        console.log('⬆️ Synced local evaluation to backend:', key);
+      } catch (err) {
+        console.warn('Failed to sync local evaluation:', key, err.message);
+      }
+    }
+  }
+  if (syncedCount > 0) {
+    console.log(`✅ Synced ${syncedCount} local evaluations to backend for user ${userId}`);
+  }
+}
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, Typography, Row, Col, message, Progress, Button, Select } from 'antd';
 import { MedicineBoxOutlined, CheckCircleOutlined, ReloadOutlined } from '@ant-design/icons';
@@ -150,30 +175,29 @@ const PatientEvaluation = ({ userData }) => {
             const data = await response.json();
             const sortedIds = getSortedIds(patientsMap);
             console.log('\n=== USER COMPLETED EVALUATIONS FROM DATABASE ===');
+            let individualEvalSet = new Set();
+            let patientEvalSet = new Set();
             if (data.evaluationCount === 0) {
               console.log('No evaluations from this user yet.');
               setCompletedIndividualEvals(new Set());
               setCompletedEvaluations(new Set());
-            } else {
-              console.log(`Total evaluations: ${data.evaluationCount}`);
-              if (data.session && data.session.patientEvaluations) {
-                // Build sets from backend data
-                const individualEvalSet = new Set();
-                const patientEvalSet = new Set();
-                data.session.patientEvaluations.forEach((evaluation) => {
-                  const displayId = getDisplayId(evaluation.patientId, sortedIds);
-                  console.log(`✅ Patient ${displayId} (backend ID: ${evaluation.patientId}) - ${evaluation.recommendation_type} - Overall Rating: ${evaluation.overallRating}/10`);
-                  // Add to sets
-                  individualEvalSet.add(`${evaluation.patientId}-${evaluation.recommendation_type}`);
-                  patientEvalSet.add(evaluation.patientId);
-                });
-                setCompletedIndividualEvals(individualEvalSet);
-                setCompletedEvaluations(patientEvalSet);
-                console.log('📊 Populated completedIndividualEvals from backend:', Array.from(individualEvalSet));
-                console.log('📊 Populated completedEvaluations from backend:', Array.from(patientEvalSet));
-              }
+            } else if (data.session && data.session.patientEvaluations) {
+              // Build sets from backend data
+              data.session.patientEvaluations.forEach((evaluation) => {
+                const displayId = getDisplayId(evaluation.patientId, sortedIds);
+                console.log(`✅ Patient ${displayId} (backend ID: ${evaluation.patientId}) - ${evaluation.recommendation_type} - Overall Rating: ${evaluation.overallRating}/10`);
+                // Add to sets
+                individualEvalSet.add(`${evaluation.patientId}-${evaluation.recommendation_type}`);
+                patientEvalSet.add(evaluation.patientId);
+              });
+              setCompletedIndividualEvals(individualEvalSet);
+              setCompletedEvaluations(patientEvalSet);
+              console.log('📊 Populated completedIndividualEvals from backend:', Array.from(individualEvalSet));
+              console.log('📊 Populated completedEvaluations from backend:', Array.from(patientEvalSet));
             }
-            console.log('===============================================\n');
+            // --- SYNC LOCAL EVALUATIONS TO BACKEND IF NEEDED ---
+            await syncLocalEvaluationsToBackend(userData.userId, individualEvalSet);
+            // Optionally, re-fetch from backend after sync
           }
         } catch (error) {
           console.log('Could not fetch user evaluations from database:', error.message);

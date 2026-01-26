@@ -77,6 +77,7 @@ const userEvaluationSessionSchema = new mongoose.Schema({
 // Method to add or update a patient evaluation
 userEvaluationSessionSchema.methods.addOrUpdatePatientEvaluation = function(evaluationData) {
   const { patientId, evaluation_type, recommendation_type } = evaluationData;
+  console.log('📝 addOrUpdatePatientEvaluation called with:', JSON.stringify(evaluationData, null, 2));
   
   // Find existing evaluation for this patient AND recommendation type
   const existingEvalIndex = this.patientEvaluations.findIndex(
@@ -88,6 +89,7 @@ userEvaluationSessionSchema.methods.addOrUpdatePatientEvaluation = function(eval
     const mainEvalIndex = this.patientEvaluations.findIndex(
       evaluation => evaluation.patientId === patientId && evaluation.recommendation_type === recommendation_type
     );
+    console.log('🔍 Looking for main evaluation for expert feedback:', { patientId, recommendation_type, mainEvalIndex });
     
     if (mainEvalIndex === -1) {
       throw new Error(`Cannot add expert evaluation: No main evaluation found for patient ${patientId} with type ${recommendation_type}`);
@@ -110,6 +112,7 @@ userEvaluationSessionSchema.methods.addOrUpdatePatientEvaluation = function(eval
     if (existingEvalIndex !== -1) {
       // Patient evaluation already exists - user is updating their evaluation
       console.log(`🔄 Updating evaluation for patient ${patientId} (${recommendation_type})`);
+      console.log('🟡 Old evaluation:', JSON.stringify(this.patientEvaluations[existingEvalIndex], null, 2));
       
       // Calculate time spent
       if (evaluationData.evaluationStartTime && evaluationData.evaluationEndTime) {
@@ -124,6 +127,7 @@ userEvaluationSessionSchema.methods.addOrUpdatePatientEvaluation = function(eval
         ...evaluationData,
         expertEvaluation: existingExpertEval
       };
+      console.log('🟢 Updated evaluation:', JSON.stringify(this.patientEvaluations[existingEvalIndex], null, 2));
     } else {
       // Add new patient evaluation
       if (evaluationData.evaluationStartTime && evaluationData.evaluationEndTime) {
@@ -134,6 +138,7 @@ userEvaluationSessionSchema.methods.addOrUpdatePatientEvaluation = function(eval
       
       this.patientEvaluations.push(evaluationData);
       console.log(`➕ Added new evaluation for patient ${patientId} (${recommendation_type})`);
+      console.log('🆕 New evaluation data:', JSON.stringify(evaluationData, null, 2));
     }
   }
   

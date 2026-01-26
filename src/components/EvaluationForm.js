@@ -437,22 +437,28 @@ const EvaluationForm = ({ onSubmit, onExpertSubmit, loading, expertRecommendatio
         </Form.Item>
 
         <Form.Item style={{ marginTop: '32px', textAlign: 'center' }}>
-          {savedEvaluation && (
-            <div style={{ 
-              marginBottom: '16px', 
-              padding: '12px', 
-              backgroundColor: '#e6f7ff', 
-              border: '1px solid #91d5ff',
-              borderRadius: '4px'
-            }}>
-              <Text style={{ color: '#0050b3', fontWeight: 'bold' }}>
-                ✓ Previously evaluated on {new Date(savedEvaluation.timestamp).toLocaleString()}
-              </Text>
-              <div style={{ fontSize: '12px', color: '#096dd9', marginTop: '4px' }}>
-                You can update your evaluation below
+          {savedEvaluation && (() => {
+            // Try submittedAt, fallback to timestamp, fallback to null
+            const dateRaw = savedEvaluation.submittedAt || savedEvaluation.timestamp || null;
+            const dateObj = dateRaw ? new Date(dateRaw) : null;
+            const isValidDate = dateObj && !isNaN(dateObj.getTime());
+            return (
+              <div style={{ 
+                marginBottom: '16px', 
+                padding: '12px', 
+                backgroundColor: '#e6f7ff', 
+                border: '1px solid #91d5ff',
+                borderRadius: '4px'
+              }}>
+                <Text style={{ color: '#0050b3', fontWeight: 'bold' }}>
+                  ✓ Previously evaluated{isValidDate ? ` on ${dateObj.toLocaleString()}` : ''}
+                </Text>
+                <div style={{ fontSize: '12px', color: '#096dd9', marginTop: '4px' }}>
+                  You can update your evaluation below
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
           <Button 
             type="primary" 
             htmlType="submit" 
