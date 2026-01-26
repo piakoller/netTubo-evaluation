@@ -180,15 +180,15 @@ router.get('/user/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     const session = await UserEvaluationSession.findOne({ userId });
-    
     if (!session) {
+      console.log(`❌ No evaluation session found for userId: ${userId}`);
       // User hasn't started any evaluations yet - this is normal, not an error
       return res.status(200).json({ 
         session: null,
         evaluationCount: 0
       });
     }
-    
+    console.log(`✅ Loaded evaluation session for userId: ${userId} (DB session userId: ${session.userId}, count: ${session.patientEvaluations.length})`);
     res.json({
       session,
       evaluationCount: session.patientEvaluations.length
