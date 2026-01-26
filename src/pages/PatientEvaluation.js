@@ -1,3 +1,13 @@
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { Card, Typography, Row, Col, message, Progress, Button, Select } from 'antd';
+import { MedicineBoxOutlined, CheckCircleOutlined, ReloadOutlined } from '@ant-design/icons';
+import PatientInfo from '../components/PatientInfo';
+import EvaluationForm from '../components/EvaluationForm';
+import { useRef } from 'react';
+import dataService from '../services/dataService';
+import TherapyRecommendation from '../components/TherapyRecommendation';
+
 // Sync any locally stored evaluations to backend if not present
 async function syncLocalEvaluationsToBackend(userId, backendEvaluationsSet) {
   const localEvalsRaw = localStorage.getItem('evaluations');
@@ -23,14 +33,6 @@ async function syncLocalEvaluationsToBackend(userId, backendEvaluationsSet) {
     console.log(`✅ Synced ${syncedCount} local evaluations to backend for user ${userId}`);
   }
 }
-import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Typography, Row, Col, message, Progress, Button, Select } from 'antd';
-import { MedicineBoxOutlined, CheckCircleOutlined, ReloadOutlined } from '@ant-design/icons';
-import PatientInfo from '../components/PatientInfo';
-import EvaluationForm from '../components/EvaluationForm';
-import { useRef } from 'react';
-import dataService from '../services/dataService';
-import TherapyRecommendation from '../components/TherapyRecommendation';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
