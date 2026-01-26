@@ -169,7 +169,8 @@ class DataService {
       }
 
       const result = await response.json();
-      console.log('Evaluation saved to database:', result);
+      const now = new Date().toISOString();
+      console.log(`[${now}] Evaluation saved to database:`, result);
       
       // Also store in localStorage as backup
       let evaluations = [];
