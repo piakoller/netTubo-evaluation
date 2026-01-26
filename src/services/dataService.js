@@ -172,7 +172,56 @@ class DataService {
       console.log('Evaluation saved to database:', result);
       
       // Also store in localStorage as backup
-      const evaluations = JSON.parse(localStorage.getItem('evaluations') || '[]');
+      let evaluations = [];
+      let corruptedRaw = null;
+      let corrupted = false;
+      try {
+        const raw = localStorage.getItem('evaluations');
+        evaluations = raw ? JSON.parse(raw) : [];
+      } catch (e) {
+        corrupted = true;
+        corruptedRaw = localStorage.getItem('evaluations');
+        // Backup corrupted data
+        if (corruptedRaw) {
+          localStorage.setItem('evaluations_backup', corruptedRaw);
+          console.warn('Corrupted localStorage detected. Backed up to evaluations_backup.');
+        }
+        evaluations = [];
+      }
+
+      // If corrupted, try to sync unsaved evaluations from backup
+      if (corrupted && corruptedRaw) {
+        // Try to extract individual JSON objects from the corrupted string
+        let unsynced = [];
+        try {
+          // Attempt to recover as much as possible (very basic recovery)
+          const possible = corruptedRaw.match(/\{[^}]*\}/g);
+          if (possible) {
+            unsynced = possible.map(s => { try { return JSON.parse(s); } catch { return null; } }).filter(Boolean);
+          }
+        } catch {}
+        // Try to upload each unsynced evaluation
+        let allUploaded = true;
+        for (const evalObj of unsynced) {
+          try {
+            await this.saveEvaluation(evalObj);
+          } catch (err) {
+            allUploaded = false;
+            console.warn('Failed to upload recovered evaluation:', err.message);
+          }
+        }
+        // If all uploaded, replace localStorage
+        if (allUploaded) {
+          localStorage.removeItem('evaluations');
+          evaluations = [];
+          console.log('All recovered evaluations uploaded. Corrupted localStorage replaced.');
+        } else {
+          // If not all uploaded, do not overwrite localStorage
+          console.warn('Some recovered evaluations could not be uploaded. LocalStorage not replaced.');
+          return result.evaluation;
+        }
+      }
+
       const localEvaluation = {
         ...evaluation,
         id: result.evaluation?.evaluationId || Date.now().toString(),
@@ -180,7 +229,6 @@ class DataService {
       };
       evaluations.push(localEvaluation);
       localStorage.setItem('evaluations', JSON.stringify(evaluations));
-      
       return result.evaluation;
       
     } catch (error) {
@@ -188,12 +236,53 @@ class DataService {
       
       // Fallback to localStorage
       console.log('Falling back to localStorage...');
-      const evaluations = JSON.parse(localStorage.getItem('evaluations') || '[]');
+      let evaluations = [];
+      let corruptedRaw = null;
+      let corrupted = false;
+      try {
+        const raw = localStorage.getItem('evaluations');
+        evaluations = raw ? JSON.parse(raw) : [];
+      } catch (e) {
+        corrupted = true;
+        corruptedRaw = localStorage.getItem('evaluations');
+        if (corruptedRaw) {
+          localStorage.setItem('evaluations_backup', corruptedRaw);
+          console.warn('Corrupted localStorage detected. Backed up to evaluations_backup.');
+        }
+        evaluations = [];
+      }
+
+      if (corrupted && corruptedRaw) {
+        let unsynced = [];
+        try {
+          const possible = corruptedRaw.match(/\{[^}]*\}/g);
+          if (possible) {
+            unsynced = possible.map(s => { try { return JSON.parse(s); } catch { return null; } }).filter(Boolean);
+          }
+        } catch {}
+        let allUploaded = true;
+        for (const evalObj of unsynced) {
+          try {
+            await this.saveEvaluation(evalObj);
+          } catch (err) {
+            allUploaded = false;
+            console.warn('Failed to upload recovered evaluation:', err.message);
+          }
+        }
+        if (allUploaded) {
+          localStorage.removeItem('evaluations');
+          evaluations = [];
+          console.log('All recovered evaluations uploaded. Corrupted localStorage replaced.');
+        } else {
+          console.warn('Some recovered evaluations could not be uploaded. LocalStorage not replaced.');
+          return evaluation;
+        }
+      }
+
       evaluation.id = Date.now().toString();
       evaluation.timestamp = new Date().toISOString();
       evaluations.push(evaluation);
       localStorage.setItem('evaluations', JSON.stringify(evaluations));
-      
       // Show warning but don't fail
       console.warn('Evaluation saved to localStorage as fallback');
       return evaluation;

@@ -46,7 +46,7 @@ const SingleRecommendation = ({ title, recommendation, nctUrlMap = {}, showPubli
   if (!recommendation) {
     return (
       <Card title={title} style={{ marginBottom: 16 }}>
-        <p style={{ color: '#52c41a', fontWeight: 500 }}>All evaluations completed.</p>
+        <p style={{ color: '#52c41a', fontWeight: 500 }}>All evaluations completed. Thank you for your support!</p>
       </Card>
     );
   }
