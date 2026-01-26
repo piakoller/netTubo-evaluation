@@ -548,7 +548,10 @@ const PatientEvaluation = ({ userData }) => {
                 const hasBaseline = completedIndividualEvals.has(evalKeyBaseline);
                 const hasAgentic = completedIndividualEvals.has(evalKeyAgentic);
                 const completedCount = (hasBaseline ? 1 : 0) + (hasAgentic ? 1 : 0);
-                const statusText = ` (${completedCount}/2)`;
+                let statusText = ` (${completedCount}/2)`;
+                if (completedCount === 2) {
+                  statusText += ' ✓';
+                }
                 return (
                   <Option key={patientId} value={patientId}>
                     Patient {getDisplayId(patientId, sortedIds)}{statusText}
