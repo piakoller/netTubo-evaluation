@@ -539,14 +539,22 @@ const PatientEvaluation = ({ userData }) => {
                 setSavedEvaluation(null);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              style={{ width: 150 }}
+              style={{ width: 180 }}
             >
-              {sortedIds.map(patientId => (
-                <Option key={patientId} value={patientId}>
-                  Patient {getDisplayId(patientId, sortedIds)}
-                  {completedEvaluations.has(patientId) && ' ✓'}
-                </Option>
-              ))}
+              {sortedIds.map(patientId => {
+                // Check how many recommendation_types are completed for this patient
+                const evalKeyBaseline = `${patientId}-baseline`;
+                const evalKeyAgentic = `${patientId}-agentic`;
+                const hasBaseline = completedIndividualEvals.has(evalKeyBaseline);
+                const hasAgentic = completedIndividualEvals.has(evalKeyAgentic);
+                const completedCount = (hasBaseline ? 1 : 0) + (hasAgentic ? 1 : 0);
+                const statusText = ` (${completedCount}/2)`;
+                return (
+                  <Option key={patientId} value={patientId}>
+                    Patient {getDisplayId(patientId, sortedIds)}{statusText}
+                  </Option>
+                );
+              })}
             </Select>
           </Col>
           <Col>
