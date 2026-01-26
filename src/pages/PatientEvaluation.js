@@ -143,7 +143,7 @@ const PatientEvaluation = ({ userData }) => {
           console.log('📊 Loaded completed individual evaluations:', JSON.parse(savedIndividualEvals));
         }
         
-        // Fetch and log user's completed evaluations from database
+        // Fetch and process user's completed evaluations from database
         try {
           const response = await fetch(`${dataService.baseURL}/evaluations/user/${userData.userId}`);
           if (response.ok) {
@@ -152,13 +152,25 @@ const PatientEvaluation = ({ userData }) => {
             console.log('\n=== USER COMPLETED EVALUATIONS FROM DATABASE ===');
             if (data.evaluationCount === 0) {
               console.log('No evaluations from this user yet.');
+              setCompletedIndividualEvals(new Set());
+              setCompletedEvaluations(new Set());
             } else {
               console.log(`Total evaluations: ${data.evaluationCount}`);
               if (data.session && data.session.patientEvaluations) {
+                // Build sets from backend data
+                const individualEvalSet = new Set();
+                const patientEvalSet = new Set();
                 data.session.patientEvaluations.forEach((evaluation) => {
                   const displayId = getDisplayId(evaluation.patientId, sortedIds);
                   console.log(`✅ Patient ${displayId} (backend ID: ${evaluation.patientId}) - ${evaluation.recommendation_type} - Overall Rating: ${evaluation.overallRating}/10`);
+                  // Add to sets
+                  individualEvalSet.add(`${evaluation.patientId}-${evaluation.recommendation_type}`);
+                  patientEvalSet.add(evaluation.patientId);
                 });
+                setCompletedIndividualEvals(individualEvalSet);
+                setCompletedEvaluations(patientEvalSet);
+                console.log('📊 Populated completedIndividualEvals from backend:', Array.from(individualEvalSet));
+                console.log('📊 Populated completedEvaluations from backend:', Array.from(patientEvalSet));
               }
             }
             console.log('===============================================\n');
