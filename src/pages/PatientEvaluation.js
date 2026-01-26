@@ -509,17 +509,20 @@ const PatientEvaluation = ({ userData }) => {
         if (selectedPatient?.expert_recommendation) {
           setPendingExpertPatientId(selectedPatientId);
         } else {
-          // No expert evaluation needed, mark patient as completed and move to next
+          // No expert evaluation needed, mark patient as completed
           await saveCompletedEvaluation(selectedPatientId);
-          // Move to first recommendation of next patient
+          // Find the next patient with incomplete evaluations
           const sortedIds = getSortedIds(patients);
-          const currentIdx = sortedIds.indexOf(selectedPatientId);
-          if (currentIdx >= 0 && currentIdx < sortedIds.length - 1) {
-            const nextPatientId = sortedIds[currentIdx + 1];
-            setSelectedPatientId(nextPatientId);
-            setSelectedPatient(patients[nextPatientId]);
-            setCurrentRecommendationIndex(0);
-            setSavedEvaluation(null); // Reset saved evaluation to trigger reload
+          const nextIncomplete = sortedIds.find(
+            (id) => (recommendationQueues[id] || []).length > 0 &&
+            (!newCompletedIndividualEvals.has(`${id}-baseline`) || !newCompletedIndividualEvals.has(`${id}-agentic`))          );
+          if (nextIncomplete && nextIncomplete !== selectedPatientId) {
+            setSelectedPatientId(nextIncomplete);
+            setSelectedPatient(patients[nextIncomplete]);
+            // Jump to the first incomplete recommendation for that patient
+            const smartIndex = getFirstIncompleteIndex(nextIncomplete, recommendationQueues, newCompletedIndividualEvals);
+            setCurrentRecommendationIndex(smartIndex);
+            setSavedEvaluation(null);
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }
         }
