@@ -8,6 +8,18 @@ import { useRef } from 'react';
 import dataService from '../services/dataService';
 import TherapyRecommendation from '../components/TherapyRecommendation';
 
+// Returns the index of the first incomplete recommendation for a patient
+function getFirstIncompleteIndex(patientId, recommendationQueues, completedIndividualEvals) {
+  const queue = recommendationQueues[patientId] || [];
+  for (let i = 0; i < queue.length; i++) {
+    const key = `${patientId}-${queue[i]}`;
+    if (!completedIndividualEvals.has(key)) {
+      return i;
+    }
+  }
+  return 0;
+}
+
 // Sync any locally stored evaluations to backend if not present
 async function syncLocalEvaluationsToBackend(userId, backendEvaluationsSet) {
   const localEvalsRaw = localStorage.getItem('evaluations');
@@ -56,9 +68,36 @@ const getDisplayId = (backendId, sortedIds) => {
   return index >= 0 ? index + 1 : backendId;
 };
 
-const getBackendId = (displayId, sortedIds) => {
-  const index = displayId - 1;
-  return sortedIds[index] || null;
+// Helper: Rebuild 'completedEvaluations' based on ACTUAL data (DB + Local)
+// This ensures that even if the "Done" flag is wrong, we check the actual files.
+const recalculateProgress = (allEvaluations) => {
+  const completedPatients = new Set();
+  const completedIndividual = new Set();
+  const evaluationsByPatient = {};
+
+  // Group all evaluations by patient
+  allEvaluations.forEach(ev => {
+    // specific fix for inconsistencies in ID naming
+    const pId = ev.patient_id || ev.patientId; 
+    
+    if (!evaluationsByPatient[pId]) {
+      evaluationsByPatient[pId] = new Set();
+    }
+    evaluationsByPatient[pId].add(ev.recommendation_type);
+    
+    // Track individual completions (e.g., "4-baseline")
+    completedIndividual.add(`${pId}-${ev.recommendation_type}`);
+  });
+
+  // Only mark a patient as "Done" if they have BOTH types
+  Object.keys(evaluationsByPatient).forEach(patientId => {
+    const types = evaluationsByPatient[patientId];
+    if (types.has('baseline') && types.has('agentic')) {
+      completedPatients.add(patientId);
+    }
+  });
+
+  return { completedPatients, completedIndividual };
 };
 
 const PatientEvaluation = ({ userData }) => {
@@ -84,15 +123,14 @@ const PatientEvaluation = ({ userData }) => {
   // Track if patient was manually selected to prevent auto-select from overriding
   const [manuallySelected, setManuallySelected] = useState(false);
 
-  // --- Data Loading Effect ---
-  // Load patients from dataService and build recommendation queues (baseline then agentic)
+  // --- Data Loading Effect (Auto-Repair Version) ---
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
-        const fetchedPatients = await dataService.loadPatientRecommendations();
 
-        // Exclude patients with case_id 1, 2, or 3 from the loaded map
+        // 1. Load Patients & Build Queues
+        const fetchedPatients = await dataService.loadPatientRecommendations();
         const patientsMap = Object.fromEntries(
           Object.entries(fetchedPatients || {}).filter(
             ([, patient]) => patient?.case_id !== 1 && patient?.case_id !== 2 && patient?.case_id !== 3
@@ -100,40 +138,16 @@ const PatientEvaluation = ({ userData }) => {
         );
         setPatients(patientsMap);
 
-        // // DEBUG: Log patient data structure
-        // console.log('=== PATIENT DATA DEBUG ===');
-        // console.log('Total patients loaded:', Object.keys(patientsMap).length);
-        // console.log('Patient IDs:', Object.keys(patientsMap));
-        
-        // // Log each patient's data
-        // Object.entries(patientsMap).forEach(([id, patient]) => {
-        //   console.log(`\nPatient ${id}:`, {
-        //     case_id: patient?.case_id,
-        //     has_baseline: !!patient?.baseline_recommendation,
-        //     has_agentic: !!patient?.recommendation,
-        //     has_expert: !!patient?.expert_recommendation,
-        //     baseline_source: patient?.baseline_recommendation?.source,
-        //     agentic_source: patient?.recommendation?.source
-        //   });
-        // });
-        // console.log('========================\n');
-
-        // build queues: randomize order of baseline and agentic per patient
-        // using patient index as seed for consistent ordering across sessions
         const queues = {};
         const sortedPatientIds = getSortedIds(patientsMap);
         
         sortedPatientIds.forEach((pid, index) => {
           const p = patientsMap[pid];
           const q = [];
-          
-          // Check if both recommendations exist
           const hasBaseline = !!p?.baseline_recommendation;
           const hasAgentic = !!p?.recommendation;
           
           if (hasBaseline && hasAgentic) {
-            // Randomize order based on patient index (even/odd)
-            // Even index: baseline first, Odd index: agentic first
             if (index % 2 === 0) {
               q.push('baseline');
               q.push('agentic');
@@ -142,68 +156,101 @@ const PatientEvaluation = ({ userData }) => {
               q.push('baseline');
             }
           } else {
-            // If only one exists, add it
             if (hasBaseline) q.push('baseline');
             if (hasAgentic) q.push('agentic');
           }
-          
           queues[pid] = q;
         });
+        setRecommendationQueues(queues);
+
+        // 2. FETCH ALL DATA: LocalStorage AND Database
+        const localEvalsRaw = localStorage.getItem('evaluations');
+        let localEvals = [];
+
+        if (localEvalsRaw) {
+          try {
+            localEvals = JSON.parse(localEvalsRaw);
+          } catch (e) {
+            console.error("❌ Local storage corrupted (JSON parse error):", e);
+            // This prevents the app from crashing. 
+            // It will default to empty local evals and rely on the database instead.
+            message.warning("Local storage data is corrupted. Reloading from database.");
+          }
+        }
         
+        // Filter local evals for current user
+        const myLocalEvals = localEvals.filter(e => e.user_data?.userId === userData.userId);
+        let dbEvals = [];
+        try {
+          // Attempt to fetch current state from DB
+          const response = await fetch(`${dataService.baseURL}/evaluations/user/${userData.userId}`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.session && data.session.patientEvaluations) {
+              // Normalize DB data to match local format
+              dbEvals = data.session.patientEvaluations.map(ev => ({
+                patient_id: ev.patientId, 
+                recommendation_type: ev.recommendation_type,
+                ...ev
+              }));
+            }
+          }
+        } catch (err) {
+          console.warn("DB Fetch failed, relying on local data", err);
+        }
+
+        // 3. MERGE & SYNC
+        const allEvalsMap = new Map();
+        
+        // Add DB evals first
+        dbEvals.forEach(ev => allEvalsMap.set(`${ev.patient_id}-${ev.recommendation_type}`, ev));
+        
+        // Add Local evals (and detect which need syncing)
+        const toSync = [];
+        myLocalEvals.forEach(ev => {
+          const key = `${ev.patient_id}-${ev.recommendation_type}`;
+          // If this key exists in local storage but NOT in the map (DB), it's missing
+          if (!allEvalsMap.has(key)) {
+            toSync.push(ev); 
+          }
+          // Overwrite map with local version (usually more recent if editing)
+          allEvalsMap.set(key, ev);
+        });
+
+        // 4. TRIGGER SYNC FOR MISSING DB ITEMS
+        if (toSync.length > 0) {
+          console.log(`Creating backup for ${toSync.length} unsaved evaluations...`);
+          for (const unsavedEval of toSync) {
+            try {
+              await dataService.saveEvaluation(unsavedEval);
+              console.log(` Restored: ${unsavedEval.patient_id} - ${unsavedEval.recommendation_type}`);
+            } catch (e) {
+              console.error("Failed to restore", e);
+            }
+          }
+          message.success(`Restored ${toSync.length} unsaved evaluations!`);
+        }
+
+        // 5. RECALCULATE TRUTH
+        const allEvaluations = Array.from(allEvalsMap.values());
+        const { completedPatients, completedIndividual } = recalculateProgress(allEvaluations);
+
+        // 6. UPDATE STATE & LOCAL STORAGE
+        // This effectively "Unlocks" the missing patients because we ignored the old corrupt flags
+        setCompletedEvaluations(completedPatients);
+        setCompletedIndividualEvals(completedIndividual);
+        
+        // Force update the local storage "done list" to match reality
+        localStorage.setItem(`completedEvaluations_${userData?.userId}`, JSON.stringify([...completedPatients]));
+        localStorage.setItem(`completedIndividualEvals_${userData?.userId}`, JSON.stringify([...completedIndividual]));
+
         // DEBUG: Log the randomized queue order for each patient
         console.log('=== RECOMMENDATION ORDER DEBUG ===');
         sortedPatientIds.forEach((pid, index) => {
           console.log(`Patient ${pid} (index ${index}):`, queues[pid].join(' → '));
         });
         console.log('==================================\n');
-        
-        setRecommendationQueues(queues);
 
-        // Load completed status from localStorage as fallback
-        const savedCompleted = localStorage.getItem(`completedEvaluations_${userData?.userId}`);
-        if (savedCompleted) setCompletedEvaluations(new Set(JSON.parse(savedCompleted)));
-        
-        // Load completed individual evaluations
-        const savedIndividualEvals = localStorage.getItem(`completedIndividualEvals_${userData?.userId}`);
-        if (savedIndividualEvals) {
-          setCompletedIndividualEvals(new Set(JSON.parse(savedIndividualEvals)));
-          console.log('📊 Loaded completed individual evaluations:', JSON.parse(savedIndividualEvals));
-        }
-        
-        // Fetch and process user's completed evaluations from database
-        try {
-          const response = await fetch(`${dataService.baseURL}/evaluations/user/${userData.userId}`);
-          if (response.ok) {
-            const data = await response.json();
-            const sortedIds = getSortedIds(patientsMap);
-            console.log('\n=== USER COMPLETED EVALUATIONS FROM DATABASE ===');
-            let individualEvalSet = new Set();
-            let patientEvalSet = new Set();
-            if (data.evaluationCount === 0) {
-              console.log('No evaluations from this user yet.');
-              setCompletedIndividualEvals(new Set());
-              setCompletedEvaluations(new Set());
-            } else if (data.session && data.session.patientEvaluations) {
-              // Build sets from backend data
-              data.session.patientEvaluations.forEach((evaluation) => {
-                const displayId = getDisplayId(evaluation.patientId, sortedIds);
-                console.log(`✅ Patient ${displayId} (backend ID: ${evaluation.patientId}) - ${evaluation.recommendation_type} - Overall Rating: ${evaluation.overallRating}/10`);
-                // Add to sets
-                individualEvalSet.add(`${evaluation.patientId}-${evaluation.recommendation_type}`);
-                patientEvalSet.add(evaluation.patientId);
-              });
-              setCompletedIndividualEvals(individualEvalSet);
-              setCompletedEvaluations(patientEvalSet);
-              console.log('📊 Populated completedIndividualEvals from backend:', Array.from(individualEvalSet));
-              console.log('📊 Populated completedEvaluations from backend:', Array.from(patientEvalSet));
-            }
-            // --- SYNC LOCAL EVALUATIONS TO BACKEND IF NEEDED ---
-            await syncLocalEvaluationsToBackend(userData.userId, individualEvalSet);
-            // Optionally, re-fetch from backend after sync
-          }
-        } catch (error) {
-          console.log('Could not fetch user evaluations from database:', error.message);
-        }
       } catch (err) {
         console.error('Failed to load data', err);
         message.error('Failed to load patient data');
@@ -338,11 +385,15 @@ const PatientEvaluation = ({ userData }) => {
   }, [completedEvaluations, userData?.userId]);
 
   const handlePatientSelect = useCallback((patientId) => {
+    setManuallySelected(true);
     setSelectedPatientId(patientId);
     setSelectedPatient(patients[patientId]);
-    setCurrentRecommendationIndex(0); // Reset to first recommendation when changing patients
+    // Find the first incomplete recommendation for this patient
+    const smartIndex = getFirstIncompleteIndex(patientId, recommendationQueues, completedIndividualEvals);
+    setCurrentRecommendationIndex(smartIndex);
+    setSavedEvaluation(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [patients]);
+  }, [patients, recommendationQueues, completedIndividualEvals]);
 
   const handleNextRecommendation = useCallback(() => {
     const q = recommendationQueues[selectedPatientId] || [];
@@ -536,11 +587,6 @@ const PatientEvaluation = ({ userData }) => {
     return <Card loading style={{ minHeight: 400 }}>Loading patient data...</Card>;
   }
 
-  // Calculate total number of evaluations needed (sum of all recommendation queues)
-  const totalEvaluations = Object.values(recommendationQueues).reduce((sum, queue) => sum + queue.length, 0);
-  const completedCount = completedIndividualEvals.size;
-  const progressPercent = totalEvaluations > 0 ? (completedCount / totalEvaluations) * 100 : 0;
-
   if (studyCompleted) {
     return (
       <div style={{ maxWidth: '800px', margin: '40px auto', textAlign: 'center' }}>
@@ -555,44 +601,35 @@ const PatientEvaluation = ({ userData }) => {
   }
 
   const sortedIds = getSortedIds(patients);
+  // Calculate total number of evaluations needed (sum of all recommendation queues)
+  const totalEvaluations = Object.values(recommendationQueues).reduce((sum, queue) => sum + queue.length, 0);
+  const completedCount = completedIndividualEvals.size;
+  const progressPercent = totalEvaluations > 0 ? (completedCount / totalEvaluations) * 100 : 0;
+
+  // Helper to check if current is done
+  const isCurrentCompleted = completedIndividualEvals.has(`${selectedPatientId}-${currentRecommendation?.type}`);
 
   return (
     <div style={{ maxWidth: '1600px', margin: '0 auto' }}>
       <Card style={{ marginBottom: 16 }}>
         <Row justify="space-between" align="middle" gutter={[16, 16]}>
           <Col>
-            <Text strong>Participant: </Text>
-            <Text>{userData?.userId}</Text>
-            <Text style={{ marginLeft: 16 }}>{userData?.profession} | {userData?.yearsExperience} years experience</Text>
+            <Text strong>Participant: </Text> <Text>{userData?.userId}</Text>
           </Col>
           <Col>
             <Text strong style={{ marginRight: 8 }}>Select Patient:</Text>
             <Select
               value={selectedPatientId}
-              onChange={(patientId) => {
-                setManuallySelected(true); // Mark as manually selected
-                setSelectedPatientId(patientId);
-                setSelectedPatient(patients[patientId]);
-                setCurrentRecommendationIndex(0);
-                setSavedEvaluation(null);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
+              onChange={handlePatientSelect}
               style={{ width: 180 }}
             >
               {sortedIds.map(patientId => {
-                // Check how many recommendation_types are completed for this patient
-                const evalKeyBaseline = `${patientId}-baseline`;
-                const evalKeyAgentic = `${patientId}-agentic`;
-                const hasBaseline = completedIndividualEvals.has(evalKeyBaseline);
-                const hasAgentic = completedIndividualEvals.has(evalKeyAgentic);
-                const completedCount = (hasBaseline ? 1 : 0) + (hasAgentic ? 1 : 0);
-                let statusText = ` (${completedCount}/2)`;
-                if (completedCount === 2) {
-                  statusText += ' ✓';
-                }
+                const hasBaseline = completedIndividualEvals.has(`${patientId}-baseline`);
+                const hasAgentic = completedIndividualEvals.has(`${patientId}-agentic`);
+                const cCount = (hasBaseline ? 1 : 0) + (hasAgentic ? 1 : 0);
                 return (
                   <Option key={patientId} value={patientId}>
-                    Patient {getDisplayId(patientId, sortedIds)}{statusText}
+                    Patient {getDisplayId(patientId, sortedIds)} ({cCount}/2) {cCount===2 ? '✓' : ''}
                   </Option>
                 );
               })}
@@ -600,7 +637,7 @@ const PatientEvaluation = ({ userData }) => {
           </Col>
           <Col>
             <Text strong>Progress: </Text>
-            <Text>{completedCount}/{totalEvaluations} evaluations completed</Text>
+            <Text>{completedCount}/{totalEvaluations}</Text>
             <Progress percent={Math.round(progressPercent)} size="small" style={{ width: 200, marginLeft: 16 }} />
           </Col>
         </Row>
@@ -613,39 +650,19 @@ const PatientEvaluation = ({ userData }) => {
       )}
 
       <Card>
-        {/* Navigation for multiple recommendations */}
         {selectedPatient && (
           <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Button 
-              onClick={handlePreviousRecommendation}
-              disabled={
-                currentRecommendationIndex === 0 && 
-                sortedIds.indexOf(selectedPatientId) === 0
-              }
-              title={
-                currentRecommendationIndex === 0 && sortedIds.indexOf(selectedPatientId) === 0
-                  ? 'This is the first recommendation'
-                  : 'Go to previous recommendation (or previous patient)'
-              }
-            >
+            <Button onClick={handlePreviousRecommendation} disabled={currentRecommendationIndex === 0 && sortedIds.indexOf(selectedPatientId) === 0}>
               ← Previous
             </Button>
             <Text strong>
-              Patient {getDisplayId(selectedPatientId, sortedIds)} of {sortedIds.length} | 
-              Recommendation {currentRecommendationIndex + 1} of {(recommendationQueues[selectedPatientId] || []).length}
+              Patient {getDisplayId(selectedPatientId, sortedIds)} | Rec {currentRecommendationIndex + 1}/{(recommendationQueues[selectedPatientId] || []).length}
+              {isCurrentCompleted && <span style={{color: 'green', marginLeft: 8}}> (Completed)</span>}
             </Text>
             <Button 
               onClick={handleNextRecommendation}
-              disabled={
-                currentRecommendationIndex >= (recommendationQueues[selectedPatientId] || []).length - 1 &&
-                sortedIds.indexOf(selectedPatientId) === sortedIds.length - 1
-              }
-              title={
-                currentRecommendationIndex >= (recommendationQueues[selectedPatientId] || []).length - 1 &&
-                sortedIds.indexOf(selectedPatientId) === sortedIds.length - 1
-                  ? 'This is the last recommendation'
-                  : 'Go to next recommendation (or next patient)'
-              }
+              // Optional: Add visual cue or warning if skipping incomplete
+              title="Go to next"
             >
               Next →
             </Button>
@@ -661,11 +678,8 @@ const PatientEvaluation = ({ userData }) => {
                 trialData={selectedPatient.trial_data || []} 
                 recommendationType={currentRecommendation.type} 
               />
-            ) : (
-              <Card><p>{selectedPatient ? "This patient's queue is complete." : "No recommendation to display."}</p></Card>
-            )}
+            ) : <Card><p>Queue complete.</p></Card>}
           </Col>
-
           <Col xs={24} lg={12}>
             <Title level={2}><CheckCircleOutlined style={{ marginRight: 8 }} />Evaluation</Title>
             {selectedPatient ? (
@@ -679,9 +693,7 @@ const PatientEvaluation = ({ userData }) => {
                 expertModalTriggerRef={expertModalTriggerRef}
                 savedEvaluation={savedEvaluation}
               />
-            ) : (
-              <Card><p>Select a patient to begin evaluation.</p></Card>
-            )}
+            ) : <Card><p>Select a patient.</p></Card>}
           </Col>
         </Row>
       </Card>
