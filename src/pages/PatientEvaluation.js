@@ -646,6 +646,16 @@ const PatientEvaluation = ({ userData }) => {
         </Row>
       </Card>
 
+      {progressPercent === 100 && (
+        <Card style={{ margin: '32px auto', maxWidth: 800, textAlign: 'center', background: '#f6ffed', borderColor: '#b7eb8f' }}>
+          <CheckCircleOutlined style={{ fontSize: 48, color: '#52c41a', marginBottom: 24 }} />
+          <Title level={2}>User Study Completed</Title>
+          <Text style={{ fontSize: 16, display: 'block', marginBottom: 32 }}>
+            Congratulations! You have completed all {totalEvaluations} evaluations. Thank you for your participation!
+          </Text>
+        </Card>
+      )}
+
       {selectedPatient && (
         <Card style={{ marginBottom: 16 }}>
           <PatientInfo patient={selectedPatient} displayId={getDisplayId(selectedPatientId, sortedIds)} />
