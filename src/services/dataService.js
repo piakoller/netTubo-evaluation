@@ -1,7 +1,12 @@
 // Data service for loading LLM therapy recommendatijs
 class DataService {
   constructor() {
-    this.baseURL = 'http://localhost:5001/api';
+    // Allow deploying frontend and backend to different hosts. Configure backend via REACT_APP_API_BASE.
+    // If REACT_APP_API_BASE is not set, use relative '/api' so same-origin requests work.
+    const RAW_API_BASE = process.env.REACT_APP_API_BASE || '';
+    const API_HOST = RAW_API_BASE.replace(/\/$/, '');
+    this.baseURL = API_HOST ? `${API_HOST}/api` : '/api';
+    console.log('DataService using API base URL:', this.baseURL);
     this.cache = new Map();
     this.cacheExpiry = 5 * 60 * 1000; // 5 minutes
   }
@@ -38,8 +43,8 @@ class DataService {
       console.error('Error loading patient recommendations:', error);
       
       // If backend is not available, show helpful error message
-      if (error.message.includes('fetch')) {
-        throw new Error('Backend server is not running. Please start the backend server on port 5001.');
+      if (error instanceof TypeError || (error.message && error.message.toLowerCase().includes('failed to fetch'))) {
+        throw new Error(`Backend server is not reachable at ${this.baseURL}. Please ensure the backend is running and accessible (CORS, network).`);
       }
       
       throw error;
@@ -106,27 +111,241 @@ class DataService {
     }
   }
 
-  // Mock evaluation storage (in real app, would save to file system or database)
+  // Save evaluation to database
   async saveEvaluation(evaluation) {
-    console.log('Saving evaluation:', evaluation);
+    console.log('Saving evaluation to database:', evaluation);
     
-    // Store in localStorage for demo purposes
-    const evaluations = JSON.parse(localStorage.getItem('evaluations') || '[]');
-    evaluation.id = Date.now().toString();
-    evaluation.timestamp = new Date().toISOString();
-    evaluations.push(evaluation);
-    localStorage.setItem('evaluations', JSON.stringify(evaluations));
-    
-    return evaluation;
+    try {
+      // Add evaluation start time if not present
+      const evaluationData = {
+        ...evaluation,
+        evaluationStartTime: evaluation.evaluationStartTime || new Date().toISOString()
+      };
+
+      // Prepare the payload with correct field mapping
+      const payload = {
+        userId: evaluationData.user_data?.userId,
+        patientId: evaluationData.patient_id,
+        evaluation_type: evaluationData.evaluation_type || 'main',
+        userData: evaluationData.user_data,
+        evaluationStartTime: evaluationData.evaluationStartTime,
+        
+        // Main evaluation fields
+        recommendation_type: evaluationData.recommendation_type,
+        overallRating: evaluationData.overall_rating,
+        implementationWillingness: evaluationData.implementation_willingness,
+        comments: evaluationData.comments || '',
+        
+        // Detailed Yes/No questions - field names now match between frontend and backend
+        guideline_found: evaluationData.guideline_found,
+        cites_primary_study: evaluationData.cites_primary_study,
+        acknowledges_new_data: evaluationData.acknowledges_new_data,
+        citations_real: evaluationData.citations_real,
+        clinical_appropriateness: evaluationData.clinical_appropriateness,
+        contraindication_awareness: evaluationData.contraindication_awareness,
+        treatment_completeness: evaluationData.treatment_completeness,
+        notes_guideline_evidence_conflict: evaluationData.notes_guideline_evidence_conflict,
+        actionable_next_steps: evaluationData.actionable_next_steps,
+        personalization: evaluationData.personalization,
+        quality_of_life: evaluationData.quality_of_life,
+        
+        // Expert evaluation fields (if applicable)
+        expert_agreement: evaluationData.expert_agreement,
+        expert_comments: evaluationData.expert_comments
+      };
+
+      // Send to database
+      const response = await fetch(`${this.baseURL}/evaluations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save evaluation');
+      }
+
+      const result = await response.json();
+      const now = new Date().toISOString();
+      console.log(`[${now}] Evaluation saved to database:`, result);
+      
+      // Also store in localStorage as backup
+      let evaluations = [];
+      let corruptedRaw = null;
+      let corrupted = false;
+      try {
+        const raw = localStorage.getItem('evaluations');
+        evaluations = raw ? JSON.parse(raw) : [];
+      } catch (e) {
+        corrupted = true;
+        corruptedRaw = localStorage.getItem('evaluations');
+        // Backup corrupted data
+        if (corruptedRaw) {
+          localStorage.setItem('evaluations_backup', corruptedRaw);
+          console.warn('Corrupted localStorage detected. Backed up to evaluations_backup.');
+        }
+        evaluations = [];
+      }
+
+      // If corrupted, try to sync unsaved evaluations from backup
+      if (corrupted && corruptedRaw) {
+        // Try to extract individual JSON objects from the corrupted string
+        let unsynced = [];
+        try {
+          // Attempt to recover as much as possible (very basic recovery)
+          const possible = corruptedRaw.match(/\{[^}]*\}/g);
+          if (possible) {
+            unsynced = possible.map(s => { try { return JSON.parse(s); } catch { return null; } }).filter(Boolean);
+          }
+        } catch {}
+        // Try to upload each unsynced evaluation
+        let allUploaded = true;
+        for (const evalObj of unsynced) {
+          try {
+            await this.saveEvaluation(evalObj);
+          } catch (err) {
+            allUploaded = false;
+            console.warn('Failed to upload recovered evaluation:', err.message);
+          }
+        }
+        // If all uploaded, replace localStorage
+        if (allUploaded) {
+          localStorage.removeItem('evaluations');
+          evaluations = [];
+          console.log('All recovered evaluations uploaded. Corrupted localStorage replaced.');
+        } else {
+          // If not all uploaded, do not overwrite localStorage
+          console.warn('Some recovered evaluations could not be uploaded. LocalStorage not replaced.');
+          return result.evaluation;
+        }
+      }
+
+      const localEvaluation = {
+        ...evaluation,
+        id: result.evaluation?.evaluationId || Date.now().toString(),
+        timestamp: new Date().toISOString()
+      };
+      evaluations.push(localEvaluation);
+      localStorage.setItem('evaluations', JSON.stringify(evaluations));
+      return result.evaluation;
+      
+    } catch (error) {
+      console.error('Error saving to database:', error);
+      
+      // Fallback to localStorage
+      console.log('Falling back to localStorage...');
+      let evaluations = [];
+      let corruptedRaw = null;
+      let corrupted = false;
+      try {
+        const raw = localStorage.getItem('evaluations');
+        evaluations = raw ? JSON.parse(raw) : [];
+      } catch (e) {
+        corrupted = true;
+        corruptedRaw = localStorage.getItem('evaluations');
+        if (corruptedRaw) {
+          localStorage.setItem('evaluations_backup', corruptedRaw);
+          console.warn('Corrupted localStorage detected. Backed up to evaluations_backup.');
+        }
+        evaluations = [];
+      }
+
+      if (corrupted && corruptedRaw) {
+        let unsynced = [];
+        try {
+          const possible = corruptedRaw.match(/\{[^}]*\}/g);
+          if (possible) {
+            unsynced = possible.map(s => { try { return JSON.parse(s); } catch { return null; } }).filter(Boolean);
+          }
+        } catch {}
+        let allUploaded = true;
+        for (const evalObj of unsynced) {
+          try {
+            await this.saveEvaluation(evalObj);
+          } catch (err) {
+            allUploaded = false;
+            console.warn('Failed to upload recovered evaluation:', err.message);
+          }
+        }
+        if (allUploaded) {
+          localStorage.removeItem('evaluations');
+          evaluations = [];
+          console.log('All recovered evaluations uploaded. Corrupted localStorage replaced.');
+        } else {
+          console.warn('Some recovered evaluations could not be uploaded. LocalStorage not replaced.');
+          return evaluation;
+        }
+      }
+
+      evaluation.id = Date.now().toString();
+      evaluation.timestamp = new Date().toISOString();
+      evaluations.push(evaluation);
+      localStorage.setItem('evaluations', JSON.stringify(evaluations));
+      // Show warning but don't fail
+      console.warn('Evaluation saved to localStorage as fallback');
+      return evaluation;
+    }
   }
 
   async loadEvaluations() {
     try {
-      const evaluations = JSON.parse(localStorage.getItem('evaluations') || '[]');
-      return evaluations;
+      // Try to load from database first
+      const response = await fetch(`${this.baseURL}/evaluations`);
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`Loaded ${result.evaluations?.length || 0} evaluations from database`);
+        return result.evaluations || [];
+      } else {
+        throw new Error('Database not available');
+      }
+      
     } catch (error) {
-      console.error('Error loading evaluations:', error);
-      return [];
+      console.warn('Could not load from database, using localStorage:', error.message);
+      
+      // Fallback to localStorage
+      try {
+        const evaluations = JSON.parse(localStorage.getItem('evaluations') || '[]');
+        return evaluations;
+      } catch (error) {
+        console.error('Error loading evaluations:', error);
+        return [];
+      }
+    }
+  }
+
+  async getEvaluationForPatientAndType(userId, patientId, recommendationType) {
+    try {
+      const response = await fetch(`${this.baseURL}/evaluations/user/${userId}/patient/${patientId}/type/${recommendationType}`);
+      
+      if (response.ok) {
+        const result = await response.json();
+        // Field names now match between frontend and backend, no mapping needed
+        return result.evaluation || null;
+      } else if (response.status === 404) {
+        return null; // No evaluation found
+      } else {
+        throw new Error('Database query failed');
+      }
+    } catch (error) {
+      console.warn('Could not load evaluation from database, checking localStorage:', error.message);
+      
+      // Fallback to localStorage
+      try {
+        const evaluations = JSON.parse(localStorage.getItem('evaluations') || '[]');
+        const evaluation = evaluations.find(e => 
+          e.user_data?.userId === userId && 
+          e.patient_id === patientId && 
+          e.recommendation_type === recommendationType
+        );
+        return evaluation || null;
+      } catch (error) {
+        console.error('Error loading evaluation:', error);
+        return null;
+      }
     }
   }
 

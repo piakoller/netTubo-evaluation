@@ -3,14 +3,14 @@ import { Card, Typography, Divider, Button, Space, Tooltip } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
 import { CopyOutlined, ArrowsAltOutlined, ShrinkOutlined } from '@ant-design/icons';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Paragraph } = Typography;
 
 // This component strictly shows fields available from the workflow JSON:
 // - patient.id
 // - patient.clinical_information
 // - patient.clinical_question
 // - optional: patient.expert_recommendation
-const PatientInfo = ({ patient, showExpertRecommendation = false }) => {
+const PatientInfo = ({ patient, displayId, showExpertRecommendation = false }) => {
   // Hooks must be at the top-level and not behind any early return
   const [expandClinical, setExpandClinical] = useState(false);
   const [expandQuestion, setExpandQuestion] = useState(false);
@@ -38,7 +38,7 @@ const PatientInfo = ({ patient, showExpertRecommendation = false }) => {
   const title = (
     <span>
       <UserOutlined style={{ marginRight: 8 }} />
-      Patient {patient.id}
+      Patient {displayId !== undefined ? displayId : patient.id}
     </span>
   );
 
@@ -69,22 +69,10 @@ const PatientInfo = ({ patient, showExpertRecommendation = false }) => {
         <div style={{
           whiteSpace: 'pre-wrap',
           marginBottom: 0,
-          maxHeight: expandClinical ? 'none' : 220,
-          overflow: 'hidden',
           lineHeight: 1.6
         }}>
           {patient.clinical_information || 'No clinical information available'}
         </div>
-        {!expandClinical && (patient.clinical_information || '').length > 0 && (
-          <Button type="link" size="small" onClick={() => setExpandClinical(true)} style={{ paddingLeft: 0 }}>
-            Show more
-          </Button>
-        )}
-        {expandClinical && (
-          <Button type="link" size="small" onClick={() => setExpandClinical(false)} style={{ paddingLeft: 0 }}>
-            Show less
-          </Button>
-        )}
       </div>
 
       <Divider />

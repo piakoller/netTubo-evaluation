@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Card, Form, Input, Select, Button, Typography, Alert } from 'antd';
+import { Card, Form, Input, Select, Button, Typography, Alert, message } from 'antd';
 import { UserOutlined, TrophyOutlined } from '@ant-design/icons';
 
 const { Title, Paragraph } = Typography;
@@ -8,6 +8,12 @@ const { Option } = Select;
 const UserRegistration = ({ onRegistrationComplete }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const [accessVerified, setAccessVerified] = useState(false);
+
+  // API base can be configured via REACT_APP_API_BASE (omit trailing slash),
+  // fallback to empty string so relative paths are used in same-origin setups.
+  const RAW_API_BASE = process.env.REACT_APP_API_BASE || '';
+  const API_BASE = RAW_API_BASE.replace(/\/$/, '');
 
   // Generate unique user ID
   const generateUserId = () => {
@@ -35,6 +41,25 @@ const UserRegistration = ({ onRegistrationComplete }) => {
     setLoading(true);
     
     try {
+      // 1) Verify access code first
+      let accessRes;
+      try {
+        accessRes = await fetch(`${API_BASE}/api/access/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: values.accessCode })
+        });
+      } catch (netErr) {
+        // Network-level error (CORS, server unreachable, DNS, etc.)
+        throw new Error(`Network error while verifying access code: ${netErr.message}`);
+      }
+
+      if (!accessRes.ok) {
+        const err = await accessRes.json().catch(() => ({}));
+        throw new Error(err.error || 'Access code verification failed');
+      }
+      setAccessVerified(true);
+
       const userId = generateUserId();
       const userData = {
         userId,
@@ -44,17 +69,92 @@ const UserRegistration = ({ onRegistrationComplete }) => {
         sessionStart: new Date().toISOString()
       };
 
-      // Save to database (API call would go here)
-      console.log('User registered:', userData);
+      // Save to database via API
+      let response;
+      try {
+        response = await fetch(`${API_BASE}/api/users/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId: userData.userId,
+            profession: userData.profession,
+            yearsExperience: parseInt(userData.yearsExperience)
+          })
+        });
+      } catch (netErr) {
+        // Network-level error during registration
+        throw new Error(`Network error while registering user: ${netErr.message}`);
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        let errorData = {};
+        try {
+          errorData = errorText ? JSON.parse(errorText) : {};
+        } catch (e) {
+          // non-JSON error body
+          errorData = { error: errorText || 'Failed to register user' };
+        }
+        throw new Error(errorData.error || 'Failed to register user');
+      }
+
+      // Some deployments (or 204 responses) may return an empty body. Safely handle non-JSON or empty responses.
+      let result = {};
+      const respText = await response.text().catch(() => '');
+      if (respText) {
+        try {
+          result = JSON.parse(respText);
+        } catch (e) {
+          console.warn('Non-JSON response from registration endpoint, preserving raw text');
+          result = { raw: respText };
+        }
+      }
+      console.log('User registered in database:', result);
       
-      // Store in localStorage for session management
-      localStorage.setItem('userStudyData', JSON.stringify(userData));
-      
+      // Still store in localStorage for session management (as backup)
+      try {
+        // Save via helper if available
+        // Lazy import to avoid cycles
+        const { saveUserStudyData } = await import('../utils/user');
+        saveUserStudyData(userData);
+      } catch (e) {
+        // Fallback
+        localStorage.setItem('userStudyData', JSON.stringify(userData));
+      }
+      console.log('Registration: saved userStudyData with userId=', userData.userId);
       // Call parent callback to proceed to instructions
       onRegistrationComplete(userData);
       
     } catch (error) {
       console.error('Registration error:', error);
+      // If access was not verified, do NOT proceed or fallback
+      if (!accessVerified) {
+        message.error(error.message || 'Access code verification failed');
+        return;
+      }
+
+      // Access ok, but DB failed — proceed locally only
+      message.warning('Database unavailable. Proceeding with local-only session.');
+
+      const userData = {
+        userId: generateUserId(),
+        profession: values.profession,
+        yearsExperience: values.yearsExperience,
+        timestamp: new Date().toISOString(),
+        sessionStart: new Date().toISOString()
+      };
+
+      try {
+        const { saveUserStudyData } = await import('../utils/user');
+        saveUserStudyData(userData);
+      } catch (e) {
+        localStorage.setItem('userStudyData', JSON.stringify(userData));
+      }
+      console.log('Registration fallback: saved userStudyData with userId=', userData.userId);
+
+      onRegistrationComplete(userData);
     } finally {
       setLoading(false);
     }
@@ -88,6 +188,14 @@ const UserRegistration = ({ onRegistrationComplete }) => {
           onFinish={handleSubmit}
           size="large"
         >
+          <Form.Item
+            name="accessCode"
+            label="Access code"
+            rules={[{ required: true, message: 'Please enter the access code provided by the study team' }]}
+          >
+            <Input.Password placeholder="Enter access code" autoComplete="off" style={{ width: '260px' }} />
+          </Form.Item>
+
           <Form.Item
             name="profession"
             label="What is your profession?"

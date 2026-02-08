@@ -14,13 +14,39 @@ function App() {
   const [userData, setUserData] = useState(null);
 
   useEffect(() => {
-    // Check if user is already registered in this session
-    const existingUserData = localStorage.getItem('userStudyData');
-    if (existingUserData) {
-      const parsedData = JSON.parse(existingUserData);
-      setUserData(parsedData);
-      setCurrentStep('evaluation'); // Skip to evaluation if already registered
-    }
+    const verifyUser = async () => {
+      // Use shared API_BASE logic and helper to read saved user
+      const RAW_API_BASE = process.env.REACT_APP_API_BASE || '';
+      const API_BASE = RAW_API_BASE.replace(/\/$/, '');
+      const { getCurrentUserStudyData, clearUserStudyData } = await import('./utils/user');
+      const parsedData = getCurrentUserStudyData();
+      if (parsedData?.userId) {
+        try {
+          const response = await fetch(`${API_BASE}/api/users/verify/${parsedData.userId}`);
+
+          if (response.ok) {
+            const verifiedUser = await response.json();
+            setUserData(verifiedUser);
+            setCurrentStep('evaluation'); // Proceed to evaluation
+          } else {
+            // User not found in DB, clear local storage and reset
+            clearUserStudyData();
+            setUserData(null);
+            setCurrentStep('registration');
+            messageApi.error('Your session has expired or is invalid. Please register again.');
+          }
+        } catch (error) {
+          console.error('Failed to verify user session:', error);
+          clearUserStudyData();
+          setUserData(null);
+          setCurrentStep('registration');
+          messageApi.error('Could not connect to the server to verify your session. Please try again later.');
+        }
+      }
+    };
+
+    verifyUser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleRegistrationComplete = (userData) => {
